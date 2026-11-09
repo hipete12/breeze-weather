@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.Dehaze
 import androidx.compose.material.icons.rounded.FilterDrama
 import androidx.compose.material.icons.rounded.Grain
 import androidx.compose.material.icons.rounded.NightsStay
@@ -12,7 +11,11 @@ import androidx.compose.material.icons.rounded.Thunderstorm
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
 import com.breeze.weather.data.Condition
 import com.breeze.weather.data.Units
 import java.time.LocalDate
@@ -26,11 +29,29 @@ fun Condition.icon(isDay: Boolean): ImageVector = when (this) {
     Condition.CLEAR -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.Bedtime
     Condition.PARTLY_CLOUDY -> if (isDay) Icons.Rounded.FilterDrama else Icons.Rounded.NightsStay
     Condition.CLOUDY -> Icons.Rounded.Cloud
-    Condition.FOG -> Icons.Rounded.Dehaze
+    Condition.FOG -> FogIcon
     Condition.DRIZZLE -> Icons.Rounded.Grain
     Condition.RAIN -> Icons.Rounded.WaterDrop
     Condition.SNOW -> Icons.Rounded.AcUnit
     Condition.STORM -> Icons.Rounded.Thunderstorm
+}
+
+/** Cloud with mist lines below; the stock icon sets have no fog glyph that doesn't read as a menu. */
+val FogIcon: ImageVector by lazy {
+    ImageVector.Builder("Fog", 24.dp, 24.dp, 24f, 24f).apply {
+        path(fill = SolidColor(Color.White)) {
+            moveTo(7f, 13.5f)
+            horizontalLineTo(17f)
+            arcToRelative(3.5f, 3.5f, 0f, false, false, 0.4f, -6.98f)
+            arcToRelative(5.6f, 5.6f, 0f, false, false, -10.7f, -0.9f)
+            arcToRelative(3.95f, 3.95f, 0f, false, false, 0.3f, 7.88f)
+            close()
+        }
+        path(stroke = SolidColor(Color.White), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round) {
+            moveTo(4.5f, 17f); horizontalLineTo(19.5f)
+            moveTo(7f, 20.5f); horizontalLineTo(17f)
+        }
+    }.build()
 }
 
 fun Condition.iconTint(isDay: Boolean): Color = when (this) {

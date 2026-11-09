@@ -131,7 +131,17 @@ fun HomeScreen(
                     onRequestPrecise = onRequestLocation,
                 )
             }
+            // Fade content out under the status bar so scrolled text never collides with it.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(top, top.copy(alpha = 0.85f), Color.Transparent)))
+                    .statusBarsPadding()
+                    .height(16.dp)
+            )
             BottomBar(
+                scrim = bottom,
                 count = pages.size,
                 current = pagerState.currentPage,
                 firstIsLocation = pages.firstOrNull()?.isCurrent == true,
@@ -561,6 +571,7 @@ private fun Message(text: String, action: String, onAction: () -> Unit) {
 
 @Composable
 private fun BottomBar(
+    scrim: Color,
     count: Int,
     current: Int,
     firstIsLocation: Boolean,
@@ -570,7 +581,8 @@ private fun BottomBar(
     Box(
         modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.28f))))
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to scrim.copy(alpha = 0.9f), 1f to scrim))
+            .padding(top = 20.dp)
             .navigationBarsPadding()
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
