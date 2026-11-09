@@ -9,9 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -35,17 +35,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
-import androidx.compose.material.icons.rounded.Air
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.WaterDrop
-import androidx.compose.material.icons.rounded.WbTwilight
-import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,7 +67,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -83,15 +80,12 @@ import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.Place
 import com.breeze.weather.data.Units
 import com.breeze.weather.data.Weather
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val OnSky = Color.White
-private val CardShape = RoundedCornerShape(24.dp)
 private val DefaultGradient = listOf(Color(0xFF1B2440), Color(0xFF34436B))
 
 @Composable
@@ -102,6 +96,7 @@ fun HomeScreen(
     onSearch: () -> Unit,
     onRefresh: (Place) -> Unit,
     onRequestLocation: () -> Unit,
+    onOpenDay: (Place, Int) -> Unit,
 ) {
     val pages = state.pages
     val settled = pages.getOrNull(pagerState.currentPage)
@@ -130,6 +125,7 @@ fun HomeScreen(
                     location = if (place.isCurrent) state.location else null,
                     onRefresh = { onRefresh(place) },
                     onRequestPrecise = onRequestLocation,
+                    onOpenDay = { day -> onOpenDay(place, day) },
                 )
             }
             // Fade content out under the status bar so scrolled text never collides with it.
@@ -161,6 +157,7 @@ private fun PlacePage(
     location: com.breeze.weather.ui.LocationState?,
     onRefresh: () -> Unit,
     onRequestPrecise: () -> Unit,
+    onOpenDay: (Int) -> Unit,
 ) {
     val weather = placeWeather?.weather
     val refreshing = (placeWeather?.loading == true && weather != null) || (location?.locating == true && weather != null)
@@ -180,7 +177,7 @@ private fun PlacePage(
             Spacer(Modifier.height(36.dp))
             PlaceHeader(place, location, onRequestPrecise)
             when {
-                weather != null -> WeatherBody(weather)
+                weather != null -> WeatherBody(weather, onOpenDay)
                 placeWeather?.error != null -> Message(placeWeather.error, "Try again", onRefresh)
                 location?.error != null && location.place == null -> Message(location.error, "Try again", onRefresh)
                 else -> Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
@@ -227,7 +224,7 @@ private fun PlaceHeader(place: Place, location: com.breeze.weather.ui.LocationSt
 }
 
 @Composable
-private fun ColumnScope.WeatherBody(weather: Weather) {
+private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) {
     val context = LocalContext.current
     val use24h = remember { DateFormat.is24HourFormat(context) }
     val today = weather.daily.firstOrNull()
@@ -250,42 +247,8 @@ private fun ColumnScope.WeatherBody(weather: Weather) {
     }
     Spacer(Modifier.height(36.dp))
 
-    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp),
-        ) {
-            itemsIndexed(weather.hourly) { i, hour ->
-                Column(
-                    Modifier.width(62.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        if (i == 0) "Now" else formatHour(hour.time, use24h),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = OnSky.copy(alpha = if (i == 0) 1f else 0.85f),
-                        fontWeight = if (i == 0) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 1,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Icon(
-                        hour.condition.icon(hour.isDay), contentDescription = null,
-                        tint = hour.condition.iconTint(hour.isDay), modifier = Modifier.size(26.dp),
-                    )
-                    Text(
-                        if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF9AD0FF),
-                        modifier = Modifier.height(16.dp),
-                    )
-                    Text(
-                        if (i == 0) c.temperature.deg() else hour.temperature.deg(),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = OnSky,
-                    )
-                }
-            }
-        }
+    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule, onClick = { onOpenDay(0) }) {
+        HourlyStrip(weather, use24h)
     }
 
     Spacer(Modifier.height(12.dp))
@@ -296,6 +259,7 @@ private fun ColumnScope.WeatherBody(weather: Weather) {
         weather.daily.forEachIndexed { i, day ->
             if (i > 0) HorizontalDivider(color = OnSky.copy(alpha = 0.1f))
             DayRow(
+                onClick = { onOpenDay(i) },
                 day = day,
                 label = formatDay(day.date, c.time.toLocalDate()),
                 minT = minT, maxT = maxT,
@@ -306,7 +270,7 @@ private fun ColumnScope.WeatherBody(weather: Weather) {
     }
 
     Spacer(Modifier.height(12.dp))
-    DetailsGrid(weather, use24h)
+    DetailsSection(weather, use24h)
 
     Spacer(Modifier.height(20.dp))
     val updated = Instant.ofEpochMilli(weather.fetchedAt).atZone(ZoneId.systemDefault())
@@ -318,10 +282,20 @@ private fun ColumnScope.WeatherBody(weather: Weather) {
 }
 
 @Composable
-private fun DayRow(day: DayForecast, label: String, minT: Double, maxT: Double, currentTemp: Double?, units: Units) {
+private fun DayRow(
+    onClick: () -> Unit,
+    day: DayForecast,
+    label: String,
+    minT: Double,
+    maxT: Double,
+    currentTemp: Double?,
+    units: Units,
+) {
     Row(
         Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
             .height(52.dp)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -385,146 +359,146 @@ private fun TemperatureBar(
     }
 }
 
-/** Maps a temperature to a cool→warm color. */
-private fun tempColor(t: Double, units: Units): Color {
-    val c = if (units == Units.IMPERIAL) (t - 32) * 5 / 9 else t
-    val stops = listOf(
-        -10.0 to Color(0xFFA5B4FC),
-        0.0 to Color(0xFF7DD3FC),
-        10.0 to Color(0xFF6EE7B7),
-        20.0 to Color(0xFFFDE047),
-        28.0 to Color(0xFFFDBA74),
-        36.0 to Color(0xFFF87171),
-    )
-    if (c <= stops.first().first) return stops.first().second
-    if (c >= stops.last().first) return stops.last().second
-    val i = stops.indexOfFirst { it.first > c }
-    val (t0, c0) = stops[i - 1]
-    val (t1, c1) = stops[i]
-    return lerp(c0, c1, ((c - t0) / (t1 - t0)).toFloat())
+@Composable
+private fun HourlyStrip(weather: Weather, use24h: Boolean) {
+    val hours = weather.hourly
+    val showPrecip = hours.take(6).any { it.precipitationChance >= 20 }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Exactly six hours fit the card width on any screen; the rest scroll.
+        val itemWidth = maxWidth / 6
+        LazyRow {
+            itemsIndexed(hours) { i, hour ->
+                Column(Modifier.width(itemWidth), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        if (i == 0) "Now" else formatHour(hour.time, use24h),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = OnSky.copy(alpha = if (i == 0) 1f else 0.8f),
+                        fontWeight = if (i == 0) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Icon(
+                        hour.condition.icon(hour.isDay), contentDescription = null,
+                        tint = hour.condition.iconTint(hour.isDay), modifier = Modifier.size(22.dp),
+                    )
+                    if (showPrecip) {
+                        Text(
+                            if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = RainBlue,
+                            modifier = Modifier.height(14.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Text(
+                        if (i == 0) weather.current.temperature.deg() else hour.temperature.deg(),
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                        color = OnSky,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun DetailsGrid(weather: Weather, use24h: Boolean) {
+private fun DetailsSection(weather: Weather, use24h: Boolean) {
     val c = weather.current
-    val today = weather.daily.firstOrNull()
-    val tomorrow = weather.daily.getOrNull(1)
-
-    val feelsDiff = c.feelsLike - c.temperature
-    val feelsCaption = when {
-        abs(feelsDiff) < 1.5 -> "Similar to the actual temperature"
-        feelsDiff < 0 && c.windSpeed > 10 -> "Wind makes it feel cooler"
-        feelsDiff < 0 -> "Feels cooler than actual"
-        c.humidity > 60 -> "Humidity makes it feel warmer"
-        else -> "Feels warmer than actual"
-    }
-    val humidityCaption = when {
-        c.humidity < 30 -> "Dry"
-        c.humidity < 60 -> "Comfortable"
-        c.humidity < 80 -> "Humid"
-        else -> "Very humid"
-    }
-    val uv = c.uvIndex ?: today?.uvMax ?: 0.0
-
-    val sunrise = today?.sunrise
-    val sunset = today?.sunset
-    val daylight = if (sunrise != null && sunset != null) Duration.between(sunrise, sunset) else null
-    val sunsetCaption = when {
-        sunset == null -> ""
-        c.time.isBefore(sunset) -> "In ${formatDuration(Duration.between(c.time, sunset))}"
-        tomorrow?.sunset != null -> "Tomorrow ${formatClock(tomorrow.sunset, use24h)}"
-        else -> ""
-    }
-
-    val tiles = listOf(
-        Tile("Feels like", Icons.Rounded.Thermostat, c.feelsLike.deg(), feelsCaption),
-        Tile("Humidity", Icons.Rounded.WaterDrop, "${c.humidity}%", humidityCaption),
-        Tile(
-            "Wind", Icons.Rounded.Air,
-            "${c.windSpeed.roundToInt()} ${weather.units.windLabel}",
-            "From ${windCompass(c.windDirection)}",
-            arrowDegrees = c.windDirection + 180f,
-        ),
-        Tile("UV index", Icons.Rounded.LightMode, uv.roundToInt().toString(), uvLabel(uv)),
-        Tile(
-            "Sunrise", Icons.Rounded.WbSunny,
-            sunrise?.let { formatClock(it, use24h) } ?: "—",
-            daylight?.let { "Daylight ${formatDuration(it)}" } ?: "",
-        ),
-        Tile("Sunset", Icons.Rounded.WbTwilight, sunset?.let { formatClock(it, use24h) } ?: "—", sunsetCaption),
-    )
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        tiles.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { DetailTile(it, Modifier.weight(1f)) }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FeelsLikeTile(weather, Modifier.weight(1f))
+            HumidityTile(c.humidity, Modifier.weight(1f))
         }
-    }
-}
-
-private data class Tile(
-    val title: String,
-    val icon: ImageVector,
-    val value: String,
-    val caption: String,
-    val arrowDegrees: Float? = null,
-)
-
-@Composable
-private fun DetailTile(tile: Tile, modifier: Modifier) {
-    GlassCard(title = tile.title, icon = tile.icon, modifier = modifier.height(132.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                tile.value,
-                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp),
-                color = OnSky,
-                maxLines = 1,
-            )
-            if (tile.arrowDegrees != null) {
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    Icons.Rounded.Navigation, contentDescription = null, tint = OnSky,
-                    modifier = Modifier.size(20.dp).rotate(tile.arrowDegrees),
-                )
-            }
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            tile.caption,
-            style = MaterialTheme.typography.bodySmall,
-            color = OnSky.copy(alpha = 0.8f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+        WindCard(speed = c.windSpeed, gusts = c.windGusts, direction = c.windDirection, units = weather.units)
+        SunCard(
+            sunrise = weather.daily.firstOrNull()?.sunrise,
+            sunset = weather.daily.firstOrNull()?.sunset,
+            now = weather.localNow(),
+            nextSunrise = weather.daily.getOrNull(1)?.sunrise,
+            use24h = use24h,
         )
     }
 }
 
 @Composable
-private fun GlassCard(
-    title: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(CardShape)
-            .background(Color.White.copy(alpha = 0.12f))
-            .padding(16.dp)
-    ) {
+private fun FeelsLikeTile(weather: Weather, modifier: Modifier) {
+    val c = weather.current
+    val delta = c.feelsLike - c.temperature
+    val deltaC = weather.units.deltaToC(delta)
+    val color = feelsDeltaColor(delta, weather.units)
+    val caption = when {
+        abs(deltaC) < 1 -> "Same as actual"
+        delta < 0 && c.windSpeed > 10 -> "Wind makes it feel cooler"
+        delta < 0 -> "Feels cooler than actual"
+        c.humidity > 60 -> "Humidity makes it feel warmer"
+        else -> "Feels warmer than actual"
+    }
+    GlassCard(title = "Feels like", icon = Icons.Rounded.Thermostat, modifier = modifier.height(140.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = OnSky.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                title.uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = OnSky.copy(alpha = 0.6f),
+            Text(c.feelsLike.deg(), fontSize = 28.sp, color = OnSky)
+            Spacer(Modifier.width(8.dp))
+            val rounded = delta.roundToInt()
+            Row(
+                Modifier
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.22f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (rounded != 0) {
+                    Icon(
+                        if (rounded < 0) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward,
+                        contentDescription = null, tint = color, modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(Modifier.width(2.dp))
+                }
+                Text(
+                    if (rounded == 0) "±0°" else "${abs(rounded)}°",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color,
+                )
+            }
+        }
+        Text(
+            "Actual ${c.temperature.deg()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSky.copy(alpha = 0.7f),
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun HumidityTile(humidity: Int, modifier: Modifier) {
+    val caption = when {
+        humidity < 30 -> "Dry"
+        humidity < 60 -> "Comfortable"
+        humidity < 80 -> "Humid"
+        else -> "Very humid"
+    }
+    GlassCard(title = "Humidity", icon = Icons.Rounded.WaterDrop, modifier = modifier.height(140.dp)) {
+        Text("$humidity%", fontSize = 28.sp, color = OnSky)
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.15f))
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(humidity / 100f)
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(Brush.horizontalGradient(listOf(Color(0xFFBAE6FD), Color(0xFF38BDF8))))
             )
         }
-        Spacer(Modifier.height(12.dp))
-        content()
+        Spacer(Modifier.weight(1f))
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = OnSky.copy(alpha = 0.8f))
     }
 }
 
@@ -663,10 +637,4 @@ private fun Welcome(onRequestLocation: () -> Unit, onSearch: () -> Unit) {
             Text("Search for a city", color = OnSky)
         }
     }
-}
-
-private fun formatDuration(d: Duration): String {
-    val h = d.toHours()
-    val m = d.toMinutes() % 60
-    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }

@@ -3,6 +3,7 @@ package com.breeze.weather.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.breeze.weather.data.HistoryHour
 import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.LocationDisabledException
 import com.breeze.weather.data.LocationProvider
@@ -27,11 +28,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
+import java.time.LocalDateTime
 
 data class PlaceWeather(
     val weather: Weather? = null,
     val loading: Boolean = false,
     val error: String? = null,
+)
+
+data class HistoryState(
+    val loading: Boolean = false,
+    val data: Map<LocalDateTime, HistoryHour>? = null,
+    val failed: Boolean = false,
 )
 
 data class LocationState(
@@ -85,6 +93,10 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = combine(location, store.saved, store.units, weather) { loc, saved, units, wx ->
         UiState(loc, saved, units, wx)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
+
+    private val _history = MutableStateFlow<Map<String, HistoryState>>(emptyMap())
+    /** Historical hourly averages keyed by place id, loaded lazily for the day-detail chart. */
+    val history: StateFlow<Map<String, HistoryState>> = _history.asStateFlow()
 
     private val _search = MutableStateFlow(SearchState())
     val search: StateFlow<SearchState> = _search.asStateFlow()
@@ -168,6 +180,7 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh(place: Place) {
+        if (_history.value[place.id]?.failed == true) _history.update { it - place.id }
         if (place.isCurrent) refreshCurrentLocation(forceWeather = true) else loadWeather(place, force = true)
     }
 
@@ -216,11 +229,35 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
     fun setUnits(units: Units) {
         if (units == store.units.value) return
         store.setUnits(units)
+        _history.value = emptyMap()
         viewModelScope.launch {
             state.value.pages.forEach { place ->
                 val cached = repo.cached(place, units)
                 setWeather(place.id) { it.copy(weather = cached ?: it.weather) }
                 loadWeather(place, force = false)
+            }
+        }
+    }
+
+    // ---------- History ----------
+
+    fun loadHistory(place: Place) {
+        val existing = _history.value[place.id]
+        if (existing != null && (existing.loading || existing.data != null)) return
+        val days = state.value.weather[place.id]?.weather?.daily ?: return
+        val start = days.firstOrNull()?.date ?: return
+        val end = days.last().date
+        val units = store.units.value
+        _history.update { it + (place.id to HistoryState(loading = true)) }
+        viewModelScope.launch {
+            val result = runCatching { repo.history(place, units, start, end) }
+            // Drop the result if units changed while loading.
+            if (units != store.units.value) return@launch
+            _history.update {
+                it + (place.id to result.fold(
+                    onSuccess = { data -> HistoryState(data = data) },
+                    onFailure = { HistoryState(failed = true) },
+                ))
             }
         }
     }

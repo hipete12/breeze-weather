@@ -5,8 +5,8 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 <p>
   <img src="docs/screenshots/home.png" width="200" alt="Home screen" />
   <img src="docs/screenshots/details.png" width="200" alt="Forecast and details" />
+  <img src="docs/screenshots/day.png" width="200" alt="Day detail with historical average" />
   <img src="docs/screenshots/locations.png" width="200" alt="Saved locations" />
-  <img src="docs/screenshots/search.png" width="200" alt="City search" />
 </p>
 
 ## Features
@@ -18,13 +18,25 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 - **Saved locations.** Search any city worldwide and save it. Swipe between places on the
   home screen, or open the list to jump to one. Swipe a saved place left to remove it
   (with undo).
-- **Uncluttered UI.** One big temperature, a 24-hour strip, a 10-day forecast with
-  temperature-range bars, and six detail tiles (feels like, humidity, wind, UV, sunrise,
-  sunset). The background gradient follows the current conditions and day/night.
+- **Uncluttered UI.** One big temperature, a compact 24-hour strip (six hours visible at a
+  time), a 10-day forecast with temperature-range bars, and a few focused cards. The background
+  gradient follows the current conditions and day/night.
+  - **Feels like:** shows the difference from the actual temperature, colour-coded from blue
+    (feels colder) to red (feels warmer).
+  - **Wind:** animated streaks whose number, length and speed scale with the wind and point the
+    way it blows. Also a compass and the Beaufort scale (force 0–12) with gusts.
+  - **Sunrise & sunset:** the sun's path across the day. The curve is solid for time already
+    passed and dotted for what's ahead, with the sun at its current position.
+- **Day detail.** Tap any day in the 10-day forecast, or the 24-hour strip, for a full-day
+  view, then switch days with the picker at the top. A 24-hour chart can show **temperature,
+  feels like, rain chance, precipitation, humidity, wind (with gusts), UV index or cloud cover**.
+  Tap or drag across it to read any hour. A dashed line shows the **10-year historical average**
+  for that date and hour (from the ERA5 archive), and a plain-language daily summary compares
+  the forecast with it.
 - **°C / °F toggle.** The default follows your locale.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
-- **No API key needed.** Forecasts and geocoding come from [Open-Meteo](https://open-meteo.com/).
+- **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/).
 - **No Google Play Services dependency.** Location uses the platform `LocationManager`
   (with the fused provider on Android 12+).
 
@@ -120,13 +132,18 @@ app/src/main/java/com/breeze/weather/
 ├── data/
 │   ├── Models.kt            # Domain models + Open-Meteo DTOs
 │   ├── Condition.kt         # WMO weather code → condition/description
-│   ├── WeatherRepository.kt # Forecast + geocoding HTTP client with disk cache
+│   ├── WeatherRepository.kt # Forecast, geocoding and 10-year history client with disk cache
 │   ├── LocationProvider.kt  # Precise current location + reverse geocoding
 │   └── PlacesStore.kt       # Saved places and unit preference (SharedPreferences)
 └── ui/
     ├── BreezeApp.kt         # Navigation + permission handling
     ├── WeatherViewModel.kt  # App state, refresh policy, search
     ├── HomeScreen.kt        # Pager of places with forecast cards
+    ├── DayDetailScreen.kt   # Day picker, metric selector, summary and stats for one day
+    ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
+    ├── WindCard.kt          # Animated wind streaks, compass, Beaufort scale
+    ├── SunCard.kt           # Sun-path curve for sunrise/sunset
+    ├── Components.kt        # Shared card and colour helpers
     ├── LocationsScreen.kt   # Search, saved places, unit toggle
     ├── WeatherVisuals.kt    # Icons, gradients, formatting helpers
     └── theme/Theme.kt

@@ -2,6 +2,8 @@ package com.breeze.weather
 
 import com.breeze.weather.data.Condition
 import com.breeze.weather.data.Place
+import com.breeze.weather.ui.beaufort
+import com.breeze.weather.ui.beaufortName
 import com.breeze.weather.ui.uvLabel
 import com.breeze.weather.ui.windCompass
 import org.junit.Assert.assertEquals
@@ -47,5 +49,14 @@ class FormattingTest {
         assertEquals("Japan", tokyo.subtitle)
         val x = Place("geo:2", "X", region = "", country = null, latitude = 0.0, longitude = 0.0)
         assertEquals("", x.subtitle)
+    }
+
+    @Test fun beaufortScaleFromKmh() {
+        assertEquals(0, beaufort(0.5))
+        assertEquals(2, beaufort(9.7))
+        assertEquals(4, beaufort(25.0))
+        assertEquals(8, beaufort(70.0))
+        assertEquals(12, beaufort(150.0))
+        assertEquals("Gentle breeze", beaufortName(3))
     }
 }

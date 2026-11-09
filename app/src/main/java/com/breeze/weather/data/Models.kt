@@ -28,9 +28,21 @@ data class Place(
     }
 }
 
-enum class Units(val tempParam: String, val windParam: String, val windLabel: String) {
-    METRIC("celsius", "kmh", "km/h"),
-    IMPERIAL("fahrenheit", "mph", "mph"),
+enum class Units(
+    val tempParam: String,
+    val windParam: String,
+    val windLabel: String,
+    val precipParam: String,
+    val precipLabel: String,
+) {
+    METRIC("celsius", "kmh", "km/h", "mm", "mm"),
+    IMPERIAL("fahrenheit", "mph", "mph", "inch", "in");
+
+    /** Converts a wind speed in these units to km/h. */
+    fun toKmh(speed: Double): Double = if (this == IMPERIAL) speed * 1.609344 else speed
+
+    /** Converts a temperature difference in these units to Celsius degrees. */
+    fun deltaToC(delta: Double): Double = if (this == IMPERIAL) delta / 1.8 else delta
 }
 
 enum class LocationAccess { NONE, APPROXIMATE, PRECISE }
@@ -39,11 +51,21 @@ enum class LocationAccess { NONE, APPROXIMATE, PRECISE }
 
 data class Weather(
     val current: CurrentConditions,
+    /** The next ~25 hours starting at the current hour. */
     val hourly: List<HourForecast>,
+    /** Every forecast hour (10 days), starting at local midnight today. */
+    val hours: List<HourForecast>,
     val daily: List<DayForecast>,
     val units: Units,
     val fetchedAt: Long,
-)
+    val utcOffsetSeconds: Int,
+) {
+    /** Wall-clock time right now at this place. */
+    fun localNow(): LocalDateTime =
+        LocalDateTime.now(java.time.ZoneOffset.ofTotalSeconds(utcOffsetSeconds))
+
+    fun hoursOn(date: LocalDate): List<HourForecast> = hours.filter { it.time.toLocalDate() == date }
+}
 
 data class CurrentConditions(
     val time: LocalDateTime,
@@ -54,6 +76,7 @@ data class CurrentConditions(
     val condition: Condition,
     val description: String,
     val windSpeed: Double,
+    val windGusts: Double?,
     val windDirection: Int,
     val uvIndex: Double?,
 )
@@ -62,13 +85,36 @@ data class HourForecast(
     val time: LocalDateTime,
     val temperature: Double,
     val condition: Condition,
+    val weatherCode: Int,
     val isDay: Boolean,
     val precipitationChance: Int,
+    val feelsLike: Double?,
+    val humidity: Double?,
+    val precipitation: Double?,
+    val windSpeed: Double?,
+    val windGusts: Double?,
+    val windDirection: Double?,
+    val uvIndex: Double?,
+    val cloudCover: Double?,
+)
+
+/** Multi-year average for one local hour, used as the "historical average" overlay. */
+@Serializable
+data class HistoryHour(
+    val time: String,
+    val temperature: Double? = null,
+    val feelsLike: Double? = null,
+    val humidity: Double? = null,
+    val precipitation: Double? = null,
+    val windSpeed: Double? = null,
+    val windGusts: Double? = null,
+    val cloudCover: Double? = null,
 )
 
 data class DayForecast(
     val date: LocalDate,
     val condition: Condition,
+    val weatherCode: Int,
     val high: Double,
     val low: Double,
     val precipitationChance: Int,
@@ -81,6 +127,7 @@ data class DayForecast(
 
 @Serializable
 internal data class ForecastDto(
+    @SerialName("utc_offset_seconds") val utcOffsetSeconds: Int,
     val current: CurrentDto,
     val hourly: HourlyDto,
     val daily: DailyDto,
@@ -96,6 +143,7 @@ internal data class CurrentDto(
     @SerialName("weather_code") val weatherCode: Double,
     @SerialName("wind_speed_10m") val windSpeed: Double,
     @SerialName("wind_direction_10m") val windDirection: Double,
+    @SerialName("wind_gusts_10m") val windGusts: Double? = null,
     @SerialName("uv_index") val uvIndex: Double? = null,
 )
 
@@ -106,6 +154,29 @@ internal data class HourlyDto(
     @SerialName("weather_code") val weatherCode: List<Double?>,
     @SerialName("precipitation_probability") val precipitationProbability: List<Double?>,
     @SerialName("is_day") val isDay: List<Double?>,
+    @SerialName("apparent_temperature") val apparentTemperature: List<Double?>,
+    @SerialName("relative_humidity_2m") val humidity: List<Double?>,
+    val precipitation: List<Double?>,
+    @SerialName("wind_speed_10m") val windSpeed: List<Double?>,
+    @SerialName("wind_gusts_10m") val windGusts: List<Double?>,
+    @SerialName("wind_direction_10m") val windDirection: List<Double?>,
+    @SerialName("uv_index") val uvIndex: List<Double?>,
+    @SerialName("cloud_cover") val cloudCover: List<Double?>,
+)
+
+@Serializable
+internal data class ArchiveDto(val hourly: ArchiveHourlyDto)
+
+@Serializable
+internal data class ArchiveHourlyDto(
+    val time: List<String>,
+    @SerialName("temperature_2m") val temperature: List<Double?> = emptyList(),
+    @SerialName("apparent_temperature") val apparentTemperature: List<Double?> = emptyList(),
+    @SerialName("relative_humidity_2m") val humidity: List<Double?> = emptyList(),
+    val precipitation: List<Double?> = emptyList(),
+    @SerialName("wind_speed_10m") val windSpeed: List<Double?> = emptyList(),
+    @SerialName("wind_gusts_10m") val windGusts: List<Double?> = emptyList(),
+    @SerialName("cloud_cover") val cloudCover: List<Double?> = emptyList(),
 )
 
 @Serializable

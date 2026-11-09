@@ -18,6 +18,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,17 +31,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.Place
 
-private enum class Screen { Home, Locations }
+private enum class Screen { Home, Locations, Day }
 
 @Composable
 fun BreezeApp(vm: WeatherViewModel = viewModel()) {
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     val search by vm.search.collectAsStateWithLifecycle()
+    val history by vm.history.collectAsStateWithLifecycle()
 
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var focusSearch by remember { mutableStateOf(false) }
     var targetPageId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailDay by rememberSaveable { mutableIntStateOf(0) }
     val pagerState = rememberPagerState { state.pages.size }
 
     // --- Location permission ---
@@ -96,7 +100,7 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
         }
     }
 
-    BackHandler(enabled = screen == Screen.Locations) {
+    BackHandler(enabled = screen != Screen.Home) {
         vm.onQueryChange("")
         screen = Screen.Home
     }
@@ -104,7 +108,7 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
     AnimatedContent(
         targetState = screen,
         transitionSpec = {
-            if (targetState == Screen.Locations) {
+            if (targetState != Screen.Home) {
                 (fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 12 }) togetherWith fadeOut(tween(180))
             } else {
                 fadeIn(tween(220)) togetherWith fadeOut(tween(180))
@@ -120,7 +124,29 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
                 onSearch = { focusSearch = true; screen = Screen.Locations },
                 onRefresh = vm::refresh,
                 onRequestLocation = requestLocation,
+                onOpenDay = { place, day ->
+                    detailPlaceId = place.id
+                    detailDay = day
+                    screen = Screen.Day
+                },
             )
+
+            Screen.Day -> {
+                val place = state.pages.firstOrNull { it.id == detailPlaceId }
+                val weather = place?.let { state.weather[it.id]?.weather }
+                if (place == null || weather == null) {
+                    LaunchedEffect(Unit) { screen = Screen.Home }
+                } else {
+                    DayDetailScreen(
+                        place = place,
+                        weather = weather,
+                        history = history[place.id],
+                        initialDay = detailDay,
+                        onBack = { screen = Screen.Home },
+                        onLoadHistory = { vm.loadHistory(place) },
+                    )
+                }
+            }
 
             Screen.Locations -> LocationsScreen(
                 state = state,
