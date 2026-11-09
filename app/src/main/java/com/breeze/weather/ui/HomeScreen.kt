@@ -256,7 +256,7 @@ private fun ColumnScope.WeatherBody(weather: Weather) {
         ) {
             itemsIndexed(weather.hourly) { i, hour ->
                 Column(
-                    Modifier.width(54.dp),
+                    Modifier.width(62.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(

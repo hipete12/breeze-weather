@@ -74,6 +74,10 @@ import com.breeze.weather.data.Units
 import com.breeze.weather.ui.theme.InkRaised
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +98,7 @@ fun LocationsScreen(
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
+    var restoreCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(focusSearch) { if (focusSearch) focusRequester.requestFocus() }
 
     Scaffold(
@@ -170,7 +175,9 @@ fun LocationsScreen(
                         }
                     }
                     items(state.saved, key = { it.id }) { place ->
-                        val dismiss = rememberSwipeToDismissBoxState()
+                        // A restored item revives its old composition (still mid exit-animation), whose
+                        // swipe state is "dismissed". Keying on restoreCount gives it a fresh state.
+                        val dismiss = key(restoreCount) { rememberSwipeToDismissBoxState() }
                         SwipeToDismissBox(
                             state = dismiss,
                             enableDismissFromStartToEnd = false,
@@ -185,7 +192,10 @@ fun LocationsScreen(
                                             "Removed ${place.name}", actionLabel = "Undo",
                                             duration = SnackbarDuration.Short,
                                         )
-                                        if (result == SnackbarResult.ActionPerformed) onRestore(place, index)
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            restoreCount++
+                                            onRestore(place, index)
+                                        }
                                     }
                                 }
                             },
