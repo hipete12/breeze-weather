@@ -3,6 +3,7 @@ package com.breeze.weather.ui
 import android.text.format.DateFormat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -565,7 +566,7 @@ private fun Message(text: String, action: String, onAction: () -> Unit) {
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge, color = OnSky, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = onAction) { Text(action, color = OnSky) }
+        OutlinedButton(onClick = onAction, border = BorderStroke(1.dp, OnSky.copy(alpha = 0.5f))) { Text(action, color = OnSky) }
     }
 }
 
@@ -652,7 +653,11 @@ private fun Welcome(onRequestLocation: () -> Unit, onSearch: () -> Unit) {
             Text("Use my location")
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onSearch, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        OutlinedButton(
+            onClick = onSearch,
+            border = BorderStroke(1.dp, OnSky.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) {
             Icon(Icons.Rounded.Search, contentDescription = null, tint = OnSky, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Search for a city", color = OnSky)
