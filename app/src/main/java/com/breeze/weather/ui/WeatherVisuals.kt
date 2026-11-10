@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.FilterDrama
 import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Thunderstorm
 import androidx.compose.material.icons.rounded.WbSunny
@@ -31,7 +30,7 @@ import kotlin.math.roundToInt
  */
 fun Condition.icon(isDay: Boolean, code: Int? = null): ImageVector = when (this) {
     Condition.CLEAR -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.Bedtime
-    Condition.PARTLY_CLOUDY -> if (isDay) Icons.Rounded.FilterDrama else Icons.Rounded.NightsStay
+    Condition.PARTLY_CLOUDY -> if (isDay) PartlyCloudyDayIcon else Icons.Rounded.NightsStay
     Condition.CLOUDY -> Icons.Rounded.Cloud
     Condition.FOG -> FogIcon
     Condition.DRIZZLE, Condition.RAIN -> rainIcon(rainStyle(this, code))
@@ -51,13 +50,50 @@ fun rainStyle(condition: Condition, code: Int?): RainStyle = when (code) {
     else -> if (condition == Condition.DRIZZLE) RainStyle(true, 2) else RainStyle(false, 4)
 }
 
-private fun ImageVector.Builder.cloud(fill: Brush = SolidColor(Color.White)) = path(fill = fill) {
-    moveTo(7f, 13.5f)
-    horizontalLineTo(17f)
-    arcToRelative(3.5f, 3.5f, 0f, false, false, 0.4f, -6.98f)
-    arcToRelative(5.6f, 5.6f, 0f, false, false, -10.7f, -0.9f)
-    arcToRelative(3.95f, 3.95f, 0f, false, false, 0.3f, 7.88f)
+/** The app's cloud shape (spans roughly x 2.8–20.9, y 1.9–13.5 at scale 1), offset by [ox], [oy]. */
+private fun ImageVector.Builder.cloud(
+    fill: Brush = SolidColor(Color.White),
+    ox: Float = 0f,
+    oy: Float = 0f,
+    scale: Float = 1f,
+) = path(fill = fill) {
+    val k = scale
+    moveTo(ox + 7f * k, oy + 13.5f * k)
+    horizontalLineTo(ox + 17f * k)
+    arcToRelative(3.5f * k, 3.5f * k, 0f, false, false, 0.4f * k, -6.98f * k)
+    arcToRelative(5.6f * k, 5.6f * k, 0f, false, false, -10.7f * k, -0.9f * k)
+    arcToRelative(3.95f * k, 3.95f * k, 0f, false, false, 0.3f * k, 7.88f * k)
     close()
+}
+
+/** Full-colour "partly cloudy" (day): a white cloud with the sun peeking out at the top right. */
+val PartlyCloudyDayIcon: ImageVector by lazy {
+    ImageVector.Builder("PartlyCloudyDay", 24.dp, 24.dp, 24f, 24f).apply {
+        val sun = SolidColor(Color(0xFFFFD54F))
+        // Sun sits behind the cloud's top-right shoulder so only its upper half and rays show.
+        val cx = 15.6f
+        val cy = 9.9f
+        val r = 3.6f
+        path(stroke = sun, strokeLineWidth = 1.5f, strokeLineCap = StrokeCap.Round) {
+            for (a in 0 until 360 step 45) {
+                val rad = Math.toRadians(a.toDouble())
+                val dx = kotlin.math.cos(rad).toFloat()
+                val dy = kotlin.math.sin(rad).toFloat()
+                moveTo(cx + dx * (r + 1.3f), cy + dy * (r + 1.3f))
+                lineTo(cx + dx * (r + 2.5f), cy + dy * (r + 2.5f))
+            }
+        }
+        path(fill = sun) {
+            moveTo(cx - r, cy)
+            arcTo(r, r, 0f, true, true, cx + r, cy)
+            arcTo(r, r, 0f, true, true, cx - r, cy)
+            close()
+        }
+        cloud(
+            Brush.verticalGradient(listOf(Color.White, Color(0xFFE2E8F0)), startY = 9f, endY = 21f),
+            ox = -1.9f, oy = 6.8f, scale = 1.05f,
+        )
+    }.build()
 }
 
 private val RainDrop = Color(0xFF64B5F6)
@@ -85,10 +121,14 @@ fun rainIcon(style: RainStyle): ImageVector = rainIcons.getOrPut(style) {
                 }
             }
         } else {
+            // Streaks lie on equally spaced parallel lines; each may start a little lower on its
+            // line (staggered), which keeps the spacing even while looking less mechanical.
             val n = style.count
-            val spacing = if (n >= 5) 2.9f else 3.4f
-            val lengths = listOf(4.6f, 3.4f, 5.0f, 3.8f, 4.4f)
-            val drops = listOf(0f, 1.6f, 0.4f, 1.8f, 0.8f)
+            val spacing = if (n >= 4) 3.0f else 3.3f
+            val lengths = listOf(3.2f, 2.6f, 3.4f, 2.7f, 3.1f)
+            val drops = listOf(0f, 1.1f, 0.4f, 1.3f, 0.6f)
+            val slant = 0.38f // leftward run per unit of fall
+            val topY = 15.6f
             val firstX = 12f - spacing * (n - 1) / 2
             path(
                 stroke = SolidColor(RainDrop),
@@ -96,12 +136,11 @@ fun rainIcon(style: RainStyle): ImageVector = rainIcons.getOrPut(style) {
                 strokeLineCap = StrokeCap.Round,
             ) {
                 repeat(n) { i ->
-                    val x = firstX + i * spacing
                     val len = lengths[i]
-                    val y = 15.4f + drops[i]
-                    // Tops sit centred under the cloud; the streak leans down-left from there.
+                    val y = topY + drops[i]
+                    val x = firstX + i * spacing - drops[i] * slant // stay on this streak's line
                     moveTo(x, y)
-                    lineTo(x - len * 0.38f, y + len)
+                    lineTo(x - len * slant, y + len)
                 }
             }
         }
@@ -121,7 +160,7 @@ val FogIcon: ImageVector by lazy {
 
 fun Condition.iconTint(isDay: Boolean): Color = when (this) {
     Condition.CLEAR -> if (isDay) Color(0xFFFFD54F) else Color(0xFFE3E8F5)
-    Condition.PARTLY_CLOUDY -> if (isDay) Color(0xFFFFE08A) else Color(0xFFE3E8F5)
+    Condition.PARTLY_CLOUDY -> if (isDay) Color.Unspecified else Color(0xFFE3E8F5) // day icon is full colour
     Condition.RAIN, Condition.DRIZZLE -> Color.Unspecified // rain icons carry their own colours
     Condition.STORM -> Color(0xFFFFCC66)
     else -> Color.White
