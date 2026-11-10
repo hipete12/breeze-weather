@@ -4,7 +4,8 @@ import com.breeze.weather.data.Condition
 import com.breeze.weather.data.Place
 import com.breeze.weather.ui.beaufort
 import com.breeze.weather.ui.beaufortName
-import com.breeze.weather.ui.rainLevel
+import com.breeze.weather.ui.RainStyle
+import com.breeze.weather.ui.rainStyle
 import com.breeze.weather.ui.uvLabel
 import com.breeze.weather.ui.windCompass
 import org.junit.Assert.assertEquals
@@ -62,11 +63,11 @@ class FormattingTest {
     }
 
     @Test fun rainStreaksGrowWithIntensity() {
-        assertEquals(1, rainLevel(Condition.DRIZZLE, 51))
-        assertEquals(2, rainLevel(Condition.DRIZZLE, 55))
-        assertEquals(2, rainLevel(Condition.RAIN, 61))
-        assertEquals(3, rainLevel(Condition.RAIN, 63))
-        assertEquals(4, rainLevel(Condition.RAIN, 82))
-        assertEquals(1, rainLevel(Condition.DRIZZLE, null))
+        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, 51))
+        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, 55))
+        assertEquals(RainStyle(drizzle = false, count = 3), rainStyle(Condition.RAIN, 61))
+        assertEquals(RainStyle(drizzle = false, count = 4), rainStyle(Condition.RAIN, 63))
+        assertEquals(RainStyle(drizzle = false, count = 5), rainStyle(Condition.RAIN, 82))
+        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, null))
     }
 }

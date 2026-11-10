@@ -49,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -245,8 +246,8 @@ private fun DaySelector(days: List<DayForecast>, selected: Int, today: java.time
                 Spacer(Modifier.height(2.dp))
                 Icon(
                     d.condition.icon(true, d.weatherCode), contentDescription = null,
-                    tint = d.condition.iconTint(true).copy(alpha = if (isSel) 1f else 0.8f),
-                    modifier = Modifier.size(14.dp),
+                    tint = d.condition.iconTint(true),
+                    modifier = Modifier.size(14.dp).alpha(if (isSel) 1f else 0.8f),
                 )
             }
         }
@@ -476,12 +477,16 @@ private fun summaryFor(
 
     val snowy = day.condition == Condition.SNOW
     val word = if (snowy) "Snow" else "Rain"
-    val peak = hours.maxByOrNull { it.precipitationChance }
+    // Peak = likeliest hour, ties broken by the wettest one.
+    val peak = hours.maxWithOrNull(compareBy({ it.precipitationChance }, { it.precipitation ?: 0.0 }))
     val total = hours.sumOf { it.precipitation ?: 0.0 }
+    // Showers can add up to a real amount even when no single hour is very likely, so the
+    // total counts too (≥ 1 mm / 0.04 in).
+    val meaningfulTotal = total >= if (units == Units.IMPERIAL) 0.04 else 1.0
     append(' ')
-    if (peak != null && peak.precipitationChance >= 30) {
+    if (peak != null && (peak.precipitationChance >= 30 || meaningfulTotal)) {
         append("$word is most likely around ${formatHour(peak.time, use24h)} (${peak.precipitationChance}%)")
-        if (total > 0) append(", with about ${formatPrecip(total, units)} expected")
+        if (total >= 0.005) append(", with about ${formatPrecip(total, units)} expected")
         append('.')
     } else {
         append("No significant ${word.lowercase()} expected.")
