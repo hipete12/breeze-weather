@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -406,9 +408,9 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
 private fun DetailsSection(weather: Weather, use24h: Boolean) {
     val c = weather.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FeelsLikeTile(weather, Modifier.weight(1f))
-            HumidityTile(c.humidity, Modifier.weight(1f))
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FeelsLikeTile(weather, Modifier.weight(1f).fillMaxHeight())
+            HumidityTile(c.humidity, Modifier.weight(1f).fillMaxHeight())
         }
         WindCard(speed = c.windSpeed, gusts = c.windGusts, direction = c.windDirection, units = weather.units)
         SunCard(
@@ -425,16 +427,8 @@ private fun DetailsSection(weather: Weather, use24h: Boolean) {
 private fun FeelsLikeTile(weather: Weather, modifier: Modifier) {
     val c = weather.current
     val delta = c.feelsLike - c.temperature
-    val deltaC = weather.units.deltaToC(delta)
     val color = feelsDeltaColor(delta, weather.units)
-    val caption = when {
-        abs(deltaC) < 1 -> "Same as actual"
-        delta < 0 && c.windSpeed > 10 -> "Wind makes it feel cooler"
-        delta < 0 -> "Feels cooler than actual"
-        c.humidity > 60 -> "Humidity makes it feel warmer"
-        else -> "Feels warmer than actual"
-    }
-    GlassCard(title = "Feels like", icon = Icons.Rounded.Thermostat, modifier = modifier.height(140.dp)) {
+    GlassCard(title = "Feels like", icon = Icons.Rounded.Thermostat, modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(c.feelsLike.deg(), fontSize = 28.sp, color = OnSky)
             Spacer(Modifier.width(8.dp))
@@ -466,20 +460,12 @@ private fun FeelsLikeTile(weather: Weather, modifier: Modifier) {
             color = OnSky.copy(alpha = 0.7f),
             modifier = Modifier.padding(top = 2.dp),
         )
-        Spacer(Modifier.weight(1f))
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun HumidityTile(humidity: Int, modifier: Modifier) {
-    val caption = when {
-        humidity < 30 -> "Dry"
-        humidity < 60 -> "Comfortable"
-        humidity < 80 -> "Humid"
-        else -> "Very humid"
-    }
-    GlassCard(title = "Humidity", icon = Icons.Rounded.WaterDrop, modifier = modifier.height(140.dp)) {
+    GlassCard(title = "Humidity", icon = Icons.Rounded.WaterDrop, modifier = modifier) {
         Text("$humidity%", fontSize = 28.sp, color = OnSky)
         Spacer(Modifier.height(10.dp))
         Box(
@@ -497,8 +483,6 @@ private fun HumidityTile(humidity: Int, modifier: Modifier) {
                     .background(Brush.horizontalGradient(listOf(Color(0xFFBAE6FD), Color(0xFF38BDF8))))
             )
         }
-        Spacer(Modifier.weight(1f))
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = OnSky.copy(alpha = 0.8f))
     }
 }
 

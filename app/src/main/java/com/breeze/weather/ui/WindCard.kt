@@ -74,7 +74,8 @@ fun WindCard(speed: Double, gusts: Double?, direction: Int, units: Units, modifi
     val level = beaufort(kmh)
     GlassCard(title = "Wind", icon = Icons.Rounded.Air, modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.width(124.dp)) {
+            // Text column wraps its content so the streaks get the room to its right.
+            Column {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(speed.roundToInt().toString(), fontSize = 34.sp, color = OnSky)
                     Text(
@@ -93,15 +94,10 @@ fun WindCard(speed: Double, gusts: Double?, direction: Int, units: Units, modifi
                         color = OnSky.copy(alpha = 0.8f),
                     )
                 }
-                Text(
-                    "From ${windCompass(direction)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = OnSky.copy(alpha = 0.8f),
-                )
             }
             WindStreaks(
                 kmh = kmh, gustKmh = gusts?.let(units::toKmh), direction = direction,
-                modifier = Modifier.weight(1f).height(88.dp).padding(horizontal = 6.dp),
+                modifier = Modifier.weight(1f).height(88.dp).padding(start = 4.dp, end = 10.dp),
             )
             Compass(direction, Modifier.size(84.dp))
         }
