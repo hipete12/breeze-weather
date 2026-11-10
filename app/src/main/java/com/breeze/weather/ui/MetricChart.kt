@@ -203,7 +203,8 @@ fun MetricChart(
             fun x(hour: Float) = (hour + 0.5f) / 24f * plotW
 
             val values = hours.map { metric.value(it) }
-            val hist = if (metric.hasHistory) history.map { metric.historical(it) } else emptyList()
+            // The 10-year average is noisy hour to hour; smooth it a little so it reads as a trend.
+            val hist = if (metric.hasHistory) smoothValues(history.map { metric.historical(it) }) else emptyList()
             val gusts = if (metric == Metric.WIND) hours.map { it.windGusts } else emptyList()
 
             // ---- Y range ----
@@ -353,25 +354,59 @@ private inline fun DrawScope.drawDimmedPast(nowX: Float?, draw: DrawScope.(alpha
     clipRect(left = nowX) { draw(1f) }
 }
 
-/** Smooth curve through the points, breaking at gaps (null). */
+/**
+ * Smooth curve through the points, breaking at gaps (null). Uses a monotone cubic spline
+ * (Fritsch–Carlson): tangents follow the trend through each point instead of flattening at every
+ * sample, and the curve never overshoots the data (no fake dips below 0 % or peaks above the high).
+ */
 private fun smoothPath(points: List<Offset?>): Path {
     val path = Path()
-    var prev: Offset? = null
-    for (p in points) {
-        if (p == null) {
-            prev = null
-            continue
+    var start = 0
+    while (start < points.size) {
+        if (points[start] == null) { start++; continue }
+        var end = start
+        while (end + 1 < points.size && points[end + 1] != null) end++
+        val run = points.subList(start, end + 1).map { it!! }
+        val m = monotoneSlopes(run)
+        path.moveTo(run[0].x, run[0].y)
+        for (i in 0 until run.size - 1) {
+            val p0 = run[i]
+            val p1 = run[i + 1]
+            val dx = (p1.x - p0.x) / 3
+            path.cubicTo(p0.x + dx, p0.y + m[i] * dx, p1.x - dx, p1.y - m[i + 1] * dx, p1.x, p1.y)
         }
-        val pr = prev
-        if (pr == null) path.moveTo(p.x, p.y)
-        else {
-            val mx = (pr.x + p.x) / 2
-            path.cubicTo(mx, pr.y, mx, p.y, p.x, p.y)
-        }
-        prev = p
+        start = end + 1
     }
     return path
 }
+
+/** Fritsch–Carlson tangents (dy/dx) for a monotone cubic through [pts]. */
+private fun monotoneSlopes(pts: List<Offset>): FloatArray {
+    val n = pts.size
+    val m = FloatArray(n)
+    if (n < 2) return m
+    val d = FloatArray(n - 1) { (pts[it + 1].y - pts[it].y) / (pts[it + 1].x - pts[it].x) }
+    m[0] = d[0]
+    m[n - 1] = d[n - 2]
+    for (i in 1 until n - 1) m[i] = if (d[i - 1] * d[i] <= 0f) 0f else (d[i - 1] + d[i]) / 2
+    for (i in 0 until n - 1) {
+        if (d[i] == 0f) {
+            m[i] = 0f
+            m[i + 1] = 0f
+            continue
+        }
+        val a = m[i] / d[i]
+        val b = m[i + 1] / d[i]
+        val h = a * a + b * b
+        if (h > 9f) {
+            val t = 3f / kotlin.math.sqrt(h)
+            m[i] = t * a * d[i]
+            m[i + 1] = t * b * d[i]
+        }
+    }
+    return m
+}
+
 
 private fun niceStep(raw: Double): Double {
     if (raw <= 0) return 1.0
@@ -385,4 +420,17 @@ private fun niceStep(raw: Double): Double {
         else -> 10.0
     }
     return nice * mag
+}
+
+/** Two passes of a [1, 2, 1] kernel over each run of non-null values (ends kept in place). */
+private fun smoothValues(values: List<Double?>, passes: Int = 2): List<Double?> {
+    var v = values
+    repeat(passes) {
+        v = v.mapIndexed { i, x ->
+            val a = v.getOrNull(i - 1)
+            val b = v.getOrNull(i + 1)
+            if (x == null || a == null || b == null) x else (a + 2 * x + b) / 4
+        }
+    }
+    return v
 }
