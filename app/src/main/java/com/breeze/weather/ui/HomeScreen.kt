@@ -303,7 +303,7 @@ private fun DayRow(
         Text(label, style = MaterialTheme.typography.titleMedium, color = OnSky, modifier = Modifier.width(64.dp))
         Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                day.condition.icon(true), contentDescription = null,
+                day.condition.icon(true, day.weatherCode), contentDescription = null,
                 tint = day.condition.iconTint(true), modifier = Modifier.size(24.dp),
             )
             if (day.precipitationChance >= 20) {
@@ -378,7 +378,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                     )
                     Spacer(Modifier.height(6.dp))
                     Icon(
-                        hour.condition.icon(hour.isDay), contentDescription = null,
+                        hour.condition.icon(hour.isDay, hour.weatherCode), contentDescription = null,
                         tint = hour.condition.iconTint(hour.isDay), modifier = Modifier.size(22.dp),
                     )
                     if (showPrecip) {

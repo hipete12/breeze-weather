@@ -5,10 +5,8 @@ import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.FilterDrama
-import androidx.compose.material.icons.rounded.Grain
 import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Thunderstorm
-import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -25,28 +23,64 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
 
-fun Condition.icon(isDay: Boolean): ImageVector = when (this) {
+/**
+ * Icon for a condition. Pass the precise WMO [code] so rain and drizzle can show their intensity
+ * (the number of rain streaks under the cloud).
+ */
+fun Condition.icon(isDay: Boolean, code: Int? = null): ImageVector = when (this) {
     Condition.CLEAR -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.Bedtime
     Condition.PARTLY_CLOUDY -> if (isDay) Icons.Rounded.FilterDrama else Icons.Rounded.NightsStay
     Condition.CLOUDY -> Icons.Rounded.Cloud
     Condition.FOG -> FogIcon
-    Condition.DRIZZLE -> Icons.Rounded.Grain
-    Condition.RAIN -> Icons.Rounded.WaterDrop
+    Condition.DRIZZLE, Condition.RAIN -> rainIcon(rainLevel(this, code))
     Condition.SNOW -> Icons.Rounded.AcUnit
     Condition.STORM -> Icons.Rounded.Thunderstorm
+}
+
+/** Rain intensity 1–4 (streak count) for a WMO code: drizzle 1–2, light rain 2, rain 3, heavy rain 4. */
+fun rainLevel(condition: Condition, code: Int?): Int = when (code) {
+    51, 53, 56 -> 1
+    55, 57 -> 2
+    61, 66, 80 -> 2
+    63, 67, 81 -> 3
+    65, 82 -> 4
+    else -> if (condition == Condition.DRIZZLE) 1 else 3
+}
+
+private fun ImageVector.Builder.cloud() = path(fill = SolidColor(Color.White)) {
+    moveTo(7f, 13.5f)
+    horizontalLineTo(17f)
+    arcToRelative(3.5f, 3.5f, 0f, false, false, 0.4f, -6.98f)
+    arcToRelative(5.6f, 5.6f, 0f, false, false, -10.7f, -0.9f)
+    arcToRelative(3.95f, 3.95f, 0f, false, false, 0.3f, 7.88f)
+    close()
+}
+
+private val rainIcons = arrayOfNulls<ImageVector>(4)
+
+/** Cloud with [level] (1–4) diagonal rain streaks under it. */
+fun rainIcon(level: Int): ImageVector {
+    val n = level.coerceIn(1, 4)
+    rainIcons[n - 1]?.let { return it }
+    val spacing = 3.6f
+    val firstX = 12f - spacing * (n - 1) / 2
+    return ImageVector.Builder("Rain$n", 24.dp, 24.dp, 24f, 24f).apply {
+        cloud()
+        path(stroke = SolidColor(Color.White), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round) {
+            repeat(n) { i ->
+                // Each streak leans down-left; centred under the cloud.
+                val x = firstX + i * spacing
+                moveTo(x + 1.4f, 16f)
+                lineTo(x - 1.4f, 21f)
+            }
+        }
+    }.build().also { rainIcons[n - 1] = it }
 }
 
 /** Cloud with mist lines below; the stock icon sets have no fog glyph that doesn't read as a menu. */
 val FogIcon: ImageVector by lazy {
     ImageVector.Builder("Fog", 24.dp, 24.dp, 24f, 24f).apply {
-        path(fill = SolidColor(Color.White)) {
-            moveTo(7f, 13.5f)
-            horizontalLineTo(17f)
-            arcToRelative(3.5f, 3.5f, 0f, false, false, 0.4f, -6.98f)
-            arcToRelative(5.6f, 5.6f, 0f, false, false, -10.7f, -0.9f)
-            arcToRelative(3.95f, 3.95f, 0f, false, false, 0.3f, 7.88f)
-            close()
-        }
+        cloud()
         path(stroke = SolidColor(Color.White), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round) {
             moveTo(4.5f, 17f); horizontalLineTo(19.5f)
             moveTo(7f, 20.5f); horizontalLineTo(17f)

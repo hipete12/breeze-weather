@@ -136,7 +136,7 @@ fun DayDetailScreen(
             // Day hero.
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                 Icon(
-                    day.condition.icon(true), contentDescription = null,
+                    day.condition.icon(true, day.weatherCode), contentDescription = null,
                     tint = day.condition.iconTint(true), modifier = Modifier.size(44.dp),
                 )
                 Spacer(Modifier.width(14.dp))
@@ -244,7 +244,7 @@ private fun DaySelector(days: List<DayForecast>, selected: Int, today: java.time
                 }
                 Spacer(Modifier.height(2.dp))
                 Icon(
-                    d.condition.icon(true), contentDescription = null,
+                    d.condition.icon(true, d.weatherCode), contentDescription = null,
                     tint = d.condition.iconTint(true).copy(alpha = if (isSel) 1f else 0.8f),
                     modifier = Modifier.size(14.dp),
                 )

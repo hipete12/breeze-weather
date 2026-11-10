@@ -160,7 +160,7 @@ fun MetricChart(
                                 )
                             } else {
                                 Icon(
-                                    h.condition.icon(h.isDay), contentDescription = null,
+                                    h.condition.icon(h.isDay, h.weatherCode), contentDescription = null,
                                     tint = h.condition.iconTint(h.isDay), modifier = Modifier.requiredSize(17.dp),
                                 )
                             }
