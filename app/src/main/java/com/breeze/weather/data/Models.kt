@@ -88,6 +88,7 @@ data class Weather(
             humidity = h.humidity?.roundToInt() ?: current.humidity,
             isDay = h.isDay,
             condition = h.condition,
+            weatherCode = h.weatherCode,
             description = Condition.describe(h.weatherCode, h.isDay),
             windSpeed = h.windSpeed ?: current.windSpeed,
             windGusts = h.windGusts,
@@ -109,6 +110,8 @@ data class CurrentConditions(
     val humidity: Int,
     val isDay: Boolean,
     val condition: Condition,
+    /** Precise WMO code behind [condition], for picking the icon. */
+    val weatherCode: Int,
     val description: String,
     val windSpeed: Double,
     val windGusts: Double?,

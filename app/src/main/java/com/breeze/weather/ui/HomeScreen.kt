@@ -378,7 +378,9 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         maxLines = 1,
                     )
                     Spacer(Modifier.height(6.dp))
-                    WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
+                    // "Now" shows the current reading (temperature below too), not the hour's forecast.
+                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(22.dp))
+                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
                     if (showPrecip) {
                         Text(
                             if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",

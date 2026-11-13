@@ -182,6 +182,7 @@ class WeatherRepository(context: Context) {
             humidity = c.humidity.toInt(),
             isDay = c.isDay.toInt() == 1,
             condition = Condition.fromWmo(c.weatherCode.toInt()),
+            weatherCode = c.weatherCode.toInt(),
             description = Condition.describe(c.weatherCode.toInt(), c.isDay.toInt() == 1),
             windSpeed = c.windSpeed,
             windGusts = c.windGusts,

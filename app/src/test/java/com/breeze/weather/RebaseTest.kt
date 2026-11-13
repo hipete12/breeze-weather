@@ -43,7 +43,7 @@ class RebaseTest {
         }
         val fetched = start.atTime(14, 15)
         val current = CurrentConditions(
-            fetched, 99.0, 99.0, 50, true, Condition.CLEAR, "Sunny", 5.0, null, 0, null,
+            fetched, 99.0, 99.0, 50, true, Condition.CLEAR, 0, "Sunny", 5.0, null, 0, null,
         )
         return Weather(
             current = current,
@@ -71,6 +71,7 @@ class RebaseTest {
         assertEquals(50.0, r.current.temperature, 0.0)
         assertEquals(48.0, r.current.feelsLike, 0.0)
         assertEquals(Condition.RAIN, r.current.condition)
+        assertEquals(61, r.current.weatherCode)
         assertEquals("Light rain", r.current.description)
         assertEquals(60, r.current.humidity)
         assertEquals(90, r.current.windDirection)
