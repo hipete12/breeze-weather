@@ -159,10 +159,7 @@ fun MetricChart(
                                     modifier = Modifier.requiredSize(14.dp).rotate(((h.windDirection ?: 0.0) + 180).toFloat()),
                                 )
                             } else {
-                                Icon(
-                                    h.condition.icon(h.isDay, h.weatherCode), contentDescription = null,
-                                    tint = h.condition.iconTint(h.isDay), modifier = Modifier.requiredSize(17.dp),
-                                )
+                                WeatherIcon(h.weatherCode, h.isDay, Modifier.requiredSize(17.dp))
                             }
                         }
                     }

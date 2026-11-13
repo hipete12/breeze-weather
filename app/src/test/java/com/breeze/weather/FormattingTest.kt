@@ -4,8 +4,9 @@ import com.breeze.weather.data.Condition
 import com.breeze.weather.data.Place
 import com.breeze.weather.ui.beaufort
 import com.breeze.weather.ui.beaufortName
-import com.breeze.weather.ui.RainStyle
-import com.breeze.weather.ui.rainStyle
+import com.breeze.weather.ui.IconKind
+import com.breeze.weather.ui.IconSpec
+import com.breeze.weather.ui.iconSpec
 import com.breeze.weather.ui.uvLabel
 import com.breeze.weather.ui.windCompass
 import org.junit.Assert.assertEquals
@@ -62,12 +63,30 @@ class FormattingTest {
         assertEquals("Gentle breeze", beaufortName(3))
     }
 
-    @Test fun rainStreaksGrowWithIntensity() {
-        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, 51))
-        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, 55))
-        assertEquals(RainStyle(drizzle = false, count = 3), rainStyle(Condition.RAIN, 61))
-        assertEquals(RainStyle(drizzle = false, count = 4), rainStyle(Condition.RAIN, 63))
-        assertEquals(RainStyle(drizzle = false, count = 5), rainStyle(Condition.RAIN, 82))
-        assertEquals(RainStyle(drizzle = true, count = 2), rainStyle(Condition.DRIZZLE, null))
+    @Test fun precipitationGrowsWithIntensity() {
+        assertEquals(IconSpec(IconKind.DRIZZLE, count = 2), iconSpec(51))
+        assertEquals(IconSpec(IconKind.DRIZZLE, count = 2), iconSpec(55))
+        assertEquals(IconSpec(IconKind.RAIN, count = 3), iconSpec(61))
+        assertEquals(IconSpec(IconKind.RAIN, count = 4), iconSpec(63))
+        assertEquals(IconSpec(IconKind.RAIN, count = 5), iconSpec(65))
+        assertEquals(IconSpec(IconKind.SNOW, count = 2), iconSpec(71))
+        assertEquals(IconSpec(IconKind.RAIN, count = 3, freezing = true), iconSpec(66))
+        assertEquals(IconSpec(IconKind.DRIZZLE, count = 2, freezing = true), iconSpec(56))
+        assertEquals(IconSpec(IconKind.SNOW, count = 4), iconSpec(75))
+    }
+
+    @Test fun sunPeeksOutForPartlyCloudyAndShowers() {
+        assertEquals(IconSpec(IconKind.CLOUD, peek = true), iconSpec(2))
+        assertEquals(IconSpec(IconKind.CLOUD), iconSpec(3))
+        assertEquals(IconSpec(IconKind.RAIN, peek = true, count = 3), iconSpec(80))
+        assertEquals(IconSpec(IconKind.RAIN, peek = true, count = 5), iconSpec(82))
+        assertEquals(IconSpec(IconKind.SNOW, peek = true, count = 2), iconSpec(85))
+    }
+
+    @Test fun stormsAndFallbacks() {
+        assertEquals(IconSpec(IconKind.STORM), iconSpec(95))
+        assertEquals(IconSpec(IconKind.STORM, hail = true), iconSpec(99))
+        assertEquals(IconSpec(IconKind.CLEAR), iconSpec(1))
+        assertEquals(IconSpec(IconKind.CLOUD), iconSpec(1234))
     }
 }

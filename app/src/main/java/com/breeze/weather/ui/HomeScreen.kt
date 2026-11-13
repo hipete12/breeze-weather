@@ -76,7 +76,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.breeze.weather.data.Condition
 import com.breeze.weather.data.DayForecast
 import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.Place
@@ -304,15 +303,12 @@ private fun DayRow(
     ) {
         Text(label, style = MaterialTheme.typography.titleMedium, color = OnSky, modifier = Modifier.width(64.dp))
         Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                day.condition.icon(true, day.weatherCode), contentDescription = null,
-                tint = day.condition.iconTint(true), modifier = Modifier.size(24.dp),
-            )
+            WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(24.dp))
             if (day.precipitationChance >= 20) {
                 Text(
                     "${day.precipitationChance}%",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = Color(0xFF9AD0FF),
+                    color = RainBlue,
                 )
             }
         }
@@ -379,10 +375,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         maxLines = 1,
                     )
                     Spacer(Modifier.height(6.dp))
-                    Icon(
-                        hour.condition.icon(hour.isDay, hour.weatherCode), contentDescription = null,
-                        tint = hour.condition.iconTint(hour.isDay), modifier = Modifier.size(22.dp),
-                    )
+                    WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
                     if (showPrecip) {
                         Text(
                             if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",
@@ -587,10 +580,7 @@ private fun Welcome(onRequestLocation: () -> Unit, onSearch: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Condition.CLEAR.icon(true), contentDescription = null,
-            tint = Condition.CLEAR.iconTint(true), modifier = Modifier.size(88.dp),
-        )
+        WeatherIcon(code = 0, isDay = true, modifier = Modifier.size(88.dp))
         Spacer(Modifier.height(28.dp))
         Text("Breeze", style = MaterialTheme.typography.headlineLarge, color = OnSky)
         Spacer(Modifier.height(8.dp))

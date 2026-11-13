@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only tools. Launch with: adb shell am start -n com.breeze.weather/.IconGalleryActivity -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".IconGalleryActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Breeze" />
+    </application>
+</manifest>

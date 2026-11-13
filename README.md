@@ -145,8 +145,19 @@ app/src/main/java/com/breeze/weather/
     ├── SunCard.kt           # Sun-path curve for sunrise/sunset
     ├── Components.kt        # Shared card and colour helpers
     ├── LocationsScreen.kt   # Search, saved places, unit toggle
-    ├── WeatherVisuals.kt    # Icons, gradients, formatting helpers
+    ├── WeatherIcons.kt      # Full-colour weather icons for every WMO code
+    ├── WeatherVisuals.kt    # Gradients and formatting helpers
     └── theme/Theme.kt
+```
+
+### Icon gallery (debug builds only)
+
+Debug builds include a screen that shows every weather icon, by day and by night, at the sizes the
+app uses. It's handy when changing the icons:
+
+```bash
+adb shell am start -n com.breeze.weather/.IconGalleryActivity               # day
+adb shell am start -n com.breeze.weather/.IconGalleryActivity --ez day false  # night
 ```
 
 ## Tech stack
