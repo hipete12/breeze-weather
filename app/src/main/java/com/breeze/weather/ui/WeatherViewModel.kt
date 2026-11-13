@@ -193,7 +193,8 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
         if (fresh && !force) return
         if (jobs[place.id]?.isActive == true) return
 
-        setWeather(place.id) { it.copy(loading = true, error = null) }
+        // While the refresh runs, don't show hours and days that have already gone by.
+        setWeather(place.id) { pw -> pw.copy(loading = true, error = null, weather = pw.weather?.let { it.rebasedTo(it.localNow()) }) }
         jobs[place.id] = viewModelScope.launch {
             try {
                 val result = repo.forecast(place, units)

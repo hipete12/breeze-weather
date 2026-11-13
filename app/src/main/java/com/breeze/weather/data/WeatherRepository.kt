@@ -26,11 +26,15 @@ class WeatherRepository(context: Context) {
     private val cacheDir = File(context.cacheDir, "forecasts").apply { mkdirs() }
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
-    /** Last cached forecast for [place], regardless of age, or null. */
+    /**
+     * Last cached forecast for [place], moved on to the current hour (see [Weather.rebasedTo]), or
+     * null if there is none or it no longer covers the present.
+     */
     suspend fun cached(place: Place, units: Units): Weather? = withContext(Dispatchers.IO) {
         val file = cacheFile(place, units)
         if (!file.exists()) return@withContext null
         runCatching { parseForecast(file.readText(), units, file.lastModified()) }.getOrNull()
+            ?.let { it.rebasedTo(it.localNow()) }
     }
 
     suspend fun forecast(place: Place, units: Units): Weather = withContext(Dispatchers.IO) {

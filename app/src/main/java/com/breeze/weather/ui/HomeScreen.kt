@@ -275,8 +275,11 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
 
     Spacer(Modifier.height(20.dp))
     val updated = Instant.ofEpochMilli(weather.fetchedAt).atZone(ZoneId.systemDefault())
+    val clock = if (use24h) "HH:mm" else "h:mm a"
+    // Name the day when the data isn't from today (e.g. a cached forecast shown while offline).
+    val pattern = if (updated.toLocalDate() == java.time.LocalDate.now()) clock else "MMM d, $clock"
     Text(
-        "Updated ${updated.format(DateTimeFormatter.ofPattern(if (use24h) "HH:mm" else "h:mm a"))} · Open-Meteo",
+        "Updated ${updated.format(DateTimeFormatter.ofPattern(pattern, java.util.Locale.getDefault()))} · Open-Meteo",
         style = MaterialTheme.typography.labelSmall,
         color = OnSky.copy(alpha = 0.55f),
     )

@@ -4,6 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+import kotlin.math.roundToInt
 
 /** A location the user cares about. The device's own location uses [CURRENT_ID]. */
 @Serializable
@@ -65,6 +67,39 @@ data class Weather(
         LocalDateTime.now(java.time.ZoneOffset.ofTotalSeconds(utcOffsetSeconds))
 
     fun hoursOn(date: LocalDate): List<HourForecast> = hours.filter { it.time.toLocalDate() == date }
+
+    /**
+     * This forecast as seen at [now] (wall-clock time at the place). A forecast fetched in an
+     * earlier hour, such as one loaded from the disk cache, still starts at its fetch time: its
+     * first day would read "Today" and its current conditions would be hours or days old. This
+     * drops the days and hours already past and takes the current conditions from the forecast
+     * for this hour. Returns null when the forecast no longer covers [now].
+     */
+    fun rebasedTo(now: LocalDateTime): Weather? {
+        val hour = now.truncatedTo(ChronoUnit.HOURS)
+        if (!current.time.truncatedTo(ChronoUnit.HOURS).isBefore(hour)) return this
+        val h = hours.firstOrNull { it.time == hour } ?: return null
+        val days = daily.filterNot { it.date.isBefore(now.toLocalDate()) }
+        if (days.isEmpty()) return null
+        val rebasedCurrent = CurrentConditions(
+            time = hour,
+            temperature = h.temperature,
+            feelsLike = h.feelsLike ?: h.temperature,
+            humidity = h.humidity?.roundToInt() ?: current.humidity,
+            isDay = h.isDay,
+            condition = h.condition,
+            description = Condition.describe(h.weatherCode, h.isDay),
+            windSpeed = h.windSpeed ?: current.windSpeed,
+            windGusts = h.windGusts,
+            windDirection = h.windDirection?.roundToInt() ?: current.windDirection,
+            uvIndex = h.uvIndex,
+        )
+        return copy(
+            current = rebasedCurrent,
+            hourly = hours.filterNot { it.time.isBefore(hour) }.take(25),
+            daily = days,
+        )
+    }
 }
 
 data class CurrentConditions(
