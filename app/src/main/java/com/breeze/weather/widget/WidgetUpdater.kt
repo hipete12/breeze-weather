@@ -86,6 +86,7 @@ object WidgetUpdater {
             val weather = data.weather
             if (data.state != DataState.NO_LOCATION && (weather == null || System.currentTimeMillis() - weather.fetchedAt > staleAfter)) stale = true
             val sizes = WidgetSizes.from(manager.getAppWidgetOptions(id), kind)
+            Log.d(TAG, "Drawing widget $id ($kind, ${data.state}) at $sizes")
             try {
                 manager.updateAppWidget(id, renderer.build(id, kind, config, data, sizes))
             } catch (e: RuntimeException) {

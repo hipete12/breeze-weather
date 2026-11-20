@@ -191,13 +191,16 @@ class WidgetRenderer(private val context: Context) {
                 }
                 // Text straight on the wallpaper gets a shadow, if it's light text.
                 val shadow = lightText && config.opacity < 40
+                // The launcher can switch the System theme between light and dark before Breeze
+                // redraws (always, before Android 12), so its bar track is a grey that suits both.
+                val neutralTrack = Color(0xFF8C96A8).copy(alpha = 0.32f)
                 return if (lightText) Style(
                     config.theme,
                     primary = 0xFFFFFFFF.toInt(),
                     secondary = 0xB8FFFFFF.toInt(),
                     rain = 0xFF9AD0FF.toInt(),
                     palette = IconPalette.Sky,
-                    track = Color.White.copy(alpha = 0.22f),
+                    track = if (config.theme == WidgetTheme.SYSTEM) neutralTrack else Color.White.copy(alpha = 0.22f),
                     shadow = shadow,
                 ) else Style(
                     config.theme,
@@ -205,7 +208,7 @@ class WidgetRenderer(private val context: Context) {
                     secondary = 0xFF5B6577.toInt(),
                     rain = 0xFF1F6FD1.toInt(),
                     palette = IconPalette.OnLight,
-                    track = Color(0xFF1A1F2B).copy(alpha = 0.12f),
+                    track = if (config.theme == WidgetTheme.SYSTEM) neutralTrack else Color(0xFF1A1F2B).copy(alpha = 0.12f),
                     shadow = false,
                 )
             }

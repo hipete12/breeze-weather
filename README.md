@@ -33,12 +33,52 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   Tap or drag across it to read any hour. A dashed line shows the **10-year historical average**
   for that date and hour (from the ERA5 archive), and a plain-language daily summary compares
   the forecast with it.
+- **Home screen widgets.** Six widgets in a range of sizes, all fully customizable (see below).
 - **°C / °F toggle.** The default follows your locale.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
 - **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/).
 - **No Google Play Services dependency.** Location uses the platform `LocationManager`
   (with the fused provider on Android 12+).
+
+## Widgets
+
+<p>
+  <img src="docs/screenshots/widgets.png" width="240" alt="Breeze widgets on the home screen" />
+  <img src="docs/screenshots/widget_settings.png" width="240" alt="Widget settings with a live preview" />
+</p>
+
+| Widget | Default size | Shows |
+| --- | --- | --- |
+| **Now** | 2 × 1 | Icon and temperature (1 × 1 and up) |
+| **Current conditions** | 2 × 2 | Place, large temperature, condition, high/low; readings beside it when wide |
+| **Hourly forecast** | 4 × 2 | Current conditions and the next hours, with chance of rain |
+| **Daily forecast** | 4 × 3 | Current conditions and up to 10 days with temperature bars |
+| **Weather details** | 2 × 2 | Your pick of feels like, humidity, wind, UV, chance of rain, precipitation, sunrise, sunset, cloud cover, high/low |
+| **Complete forecast** | 4 × 4 | Current conditions, hourly and daily together |
+
+- **Every widget is resizable** and lays itself out for the size it's given: more hours, days or
+  readings as it grows, and sections that don't fit are left out. A 4 × 1 hourly widget becomes
+  just the hourly strip; a narrow details widget becomes a list.
+- **Customize everything** in the settings screen, which opens when you place a widget and shows a
+  live preview over your wallpaper: place (or follow your location), style (*Sky*, the app's
+  condition gradient; *Dynamic*, Material You colours that follow light and dark mode; *Dark*;
+  *Light*), background opacity down to fully transparent (light text then gets a shadow), text
+  size, which sections and details to show, hourly interval (1, 2 or 3 hours), chance of rain,
+  temperature bars, last-updated time, and what a tap does (open Breeze, refresh, or open the
+  widget's settings).
+- **Change settings later** from the launcher (long-press › *Settings* or the pencil, Android 12+),
+  or from **Locations › Widgets** in the app, which also lists every widget with a live preview
+  and can add one straight to the home screen.
+- **Tapping** a widget opens Breeze on that place; tapping a day opens that day's detail.
+- **Updates** happen in the background every 30 minutes (configurable in the app, up to 3 hours)
+  and whenever the app fetches a forecast. Widgets showing *My location* use where you last
+  opened Breeze; allow location access *all the time* to have them follow you while the app is
+  closed. On Samsung phones, set Breeze's battery use to *Unrestricted* for the most reliable
+  updates.
+- **Compatibility:** plain `RemoteViews` widgets (no Glance) for Android 8.0+. Android 12+ gets a
+  layout for each size the launcher reports, the launcher's own corner radius and instant
+  light/dark switching; older versions get portrait and landscape layouts.
 
 ## Requirements
 
@@ -97,6 +137,25 @@ Android Studio (latest stable) works out of the box: open the project folder and
    ./gradlew testDebugUnitTest
    ```
 
+6. **Run the instrumented tests** on a connected device or emulator. They render every widget kind,
+   theme and text size at many sizes and check nothing overflows, host real widgets the way a
+   launcher does, and check the widgets' background location. They grant themselves the
+   permissions they need through the shell.
+
+   ```bash
+   ./gradlew connectedDebugAndroidTest
+   ```
+
+   `connectedDebugAndroidTest` uninstalls the app afterwards (removing any placed widgets). To keep
+   it installed, install both APKs and run the tests directly:
+
+   ```bash
+   ./gradlew assembleDebug assembleDebugAndroidTest
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+   adb shell am instrument -w com.breeze.weather.test/androidx.test.runner.AndroidJUnitRunner
+   ```
+
 ## Installing on a device or emulator
 
 ```bash
@@ -135,20 +194,55 @@ app/src/main/java/com/breeze/weather/
 │   ├── WeatherRepository.kt # Forecast, geocoding and 10-year history client with disk cache
 │   ├── LocationProvider.kt  # Precise current location + reverse geocoding
 │   └── PlacesStore.kt       # Saved places and unit preference (SharedPreferences)
-└── ui/
-    ├── BreezeApp.kt         # Navigation + permission handling
-    ├── WeatherViewModel.kt  # App state, refresh policy, search
-    ├── HomeScreen.kt        # Pager of places with forecast cards
-    ├── DayDetailScreen.kt   # Day picker, metric selector, summary and stats for one day
-    ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
-    ├── WindCard.kt          # Animated wind streaks, compass, Beaufort scale
-    ├── SunCard.kt           # Sun-path curve for sunrise/sunset
-    ├── Components.kt        # Shared card and colour helpers
-    ├── LocationsScreen.kt   # Search, saved places, unit toggle
-    ├── WeatherIcons.kt      # Full-colour weather icons for every WMO code
-    ├── WeatherVisuals.kt    # Gradients and formatting helpers
-    └── theme/Theme.kt
+├── ui/
+│   ├── BreezeApp.kt         # Navigation + permission handling
+│   ├── WeatherViewModel.kt  # App state, refresh policy, search
+│   ├── HomeScreen.kt        # Pager of places with forecast cards
+│   ├── DayDetailScreen.kt   # Day picker, metric selector, summary and stats for one day
+│   ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
+│   ├── WindCard.kt          # Animated wind streaks, compass, Beaufort scale
+│   ├── SunCard.kt           # Sun-path curve for sunrise/sunset
+│   ├── Components.kt        # Shared card and colour helpers
+│   ├── LocationsScreen.kt   # Search, saved places, unit toggle
+│   ├── WidgetsScreen.kt     # Widget gallery, placed widgets, refresh interval
+│   ├── WeatherIcons.kt      # Full-colour weather icons for every WMO code
+│   ├── WeatherVisuals.kt    # Gradients and formatting helpers
+│   └── theme/Theme.kt
+└── widget/
+    ├── WidgetConfig.kt         # Widget kinds, sections, themes and per-widget settings
+    ├── WidgetPlanner.kt        # Fits sections, hours, days and readings into a size (pure, tested)
+    ├── WidgetContent.kt        # Forecast → widget text and values
+    ├── WidgetRenderer.kt       # Builds the RemoteViews for every size and theme
+    ├── WidgetBitmaps.kt        # Draws the Compose weather icons and temperature bars as bitmaps
+    ├── WidgetProviders.kt      # One AppWidgetProvider per kind
+    ├── WidgetUpdater.kt        # Redraws, background refresh (WorkManager), widget location
+    ├── WidgetConfigActivity.kt # Settings screen with live preview; pins widgets from the app
+    └── WidgetStore.kt          # Per-widget settings storage
 ```
+
+Widget layouts live in `app/src/main/res/layout/widget_*.xml`. The build generates a `_shadow`
+copy of each (text with a shadow, for transparent widgets), so edit only the originals.
+
+### Widget lab (debug builds only)
+
+Debug builds can render any widget at several sizes over your wallpaper, with sample weather,
+which is handy when changing widget layouts:
+
+```bash
+adb shell am start -n com.breeze.weather/.WidgetLabActivity --es kind HOURLY
+adb shell am start -n com.breeze.weather/.WidgetLabActivity --es kind DAILY --es theme LIGHT --es scale LARGE
+adb shell am start -n com.breeze.weather/.WidgetLabActivity --es kind NOW --es sizes 80x90,170x80 --ei opacity 0
+```
+
+It also regenerates the widget-picker previews in `res/drawable-nodpi`:
+
+```bash
+adb shell am start -n com.breeze.weather/.WidgetLabActivity --ez export true --ei hour 13
+adb pull /sdcard/Android/data/com.breeze.weather/files/previews
+```
+
+Widget logs are tagged `BreezeWidgets` (`adb logcat -s BreezeWidgets`); each redraw logs the sizes
+the launcher reported.
 
 ### Icon gallery (debug builds only)
 
@@ -163,7 +257,7 @@ adb shell am start -n com.breeze.weather/.IconGalleryActivity --ez day false  # 
 ## Tech stack
 
 Kotlin 2.4 · Jetpack Compose (Material 3) · AndroidX Lifecycle/ViewModel · kotlinx.serialization ·
-Coroutines/Flow · Android Gradle Plugin 9.5.
+Coroutines/Flow · WorkManager · RemoteViews app widgets · Android Gradle Plugin 9.5.
 
 ## Credits
 

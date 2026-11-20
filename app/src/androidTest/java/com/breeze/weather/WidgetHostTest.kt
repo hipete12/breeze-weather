@@ -87,7 +87,8 @@ class WidgetHostTest {
     private fun awaitText(id: Int, expected: (List<String>) -> Boolean): List<String> {
         var view: View? = null
         instrumentation.runOnMainSync { view = host.createView(context, id, manager.getAppWidgetInfo(id)) }
-        val deadline = System.currentTimeMillis() + 10_000
+        // Generous: on a freshly booted emulator the broadcast queue can be slow.
+        val deadline = System.currentTimeMillis() + 30_000
         var last = emptyList<String>()
         while (System.currentTimeMillis() < deadline) {
             instrumentation.runOnMainSync { last = texts(view!!) }
@@ -115,6 +116,7 @@ class WidgetHostTest {
             Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
                 .setComponent(ComponentName(context, WidgetProviders.providerClass(WidgetKind.CONDITIONS)))
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(id))
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         )
         val shown = awaitText(id) { "Testville" in it }
         assertTrue(shown.toString(), shown.any { it.contains("Loading") || it.contains("Can't reach") || it.contains("°") })
@@ -138,7 +140,7 @@ class WidgetHostTest {
         assertNotNull(store.config(id))
         instrumentation.runOnMainSync { host.deleteAppWidgetId(id) }
         ids -= id
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 30_000
         while (store.config(id) != null && System.currentTimeMillis() < deadline) Thread.sleep(100)
         assertNull(store.config(id))
     }

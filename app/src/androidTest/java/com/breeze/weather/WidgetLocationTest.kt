@@ -38,35 +38,50 @@ class WidgetLocationTest {
     @Before fun setUp() {
         shell("pm grant ${context.packageName} android.permission.ACCESS_FINE_LOCATION")
         shell("pm grant ${context.packageName} android.permission.ACCESS_COARSE_LOCATION")
+        // A background refresh only sees locations with "Allow all the time".
+        shell("pm grant ${context.packageName} android.permission.ACCESS_BACKGROUND_LOCATION")
         shell("appops set ${context.packageName} android:mock_location allow")
-        @Suppress("DEPRECATION")
-        manager.addTestProvider(PROVIDER, false, false, false, false, true, true, true, 1, 1)
-        manager.setTestProviderEnabled(PROVIDER, true)
+        // Stand in for every provider, so a fresh fix (if Android grants one) and the cached
+        // fallback both say the same place, whichever this device's background rules allow.
+        providers.forEach { name ->
+            runCatching {
+                @Suppress("DEPRECATION")
+                manager.addTestProvider(name, false, false, false, false, true, true, true, 1, 1)
+                manager.setTestProviderEnabled(name, true)
+            }
+        }
     }
 
     @After fun tearDown() {
-        runCatching { manager.removeTestProvider(PROVIDER) }
+        providers.forEach { runCatching { manager.removeTestProvider(it) } }
         shell("appops set ${context.packageName} android:mock_location deny")
         store.lastCurrentPlace = saved
     }
 
     @Test fun refreshPicksUpWhereTheDeviceIsNow() {
-        manager.setTestProviderLocation(
-            PROVIDER,
-            Location(PROVIDER).apply {
-                latitude = 48.8566
-                longitude = 2.3522
-                accuracy = 5f
-                time = System.currentTimeMillis()
-                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-            },
-        )
+        providers.forEach { name ->
+            runCatching {
+                manager.setTestProviderLocation(
+                    name,
+                    Location(name).apply {
+                        latitude = 48.8566
+                        longitude = 2.3522
+                        accuracy = 5f
+                        time = System.currentTimeMillis()
+                        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                    },
+                )
+            }
+        }
         runBlocking { WidgetUpdater.updateDeviceLocation(WidgetUpdater.Sources(context)) }
         val place = PlacesStore(context).lastCurrentPlace
         assertTrue("now at $place", place != null && place.distanceKm(48.8566, 2.3522) < 1.0)
     }
 
-    private companion object {
-        const val PROVIDER = "breeze-test"
-    }
+    private val providers = listOfNotNull(
+        "breeze-test",
+        LocationManager.GPS_PROVIDER,
+        LocationManager.NETWORK_PROVIDER,
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) LocationManager.FUSED_PROVIDER else null,
+    )
 }
