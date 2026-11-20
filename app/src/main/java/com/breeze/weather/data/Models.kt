@@ -30,6 +30,17 @@ data class Place(
     }
 }
 
+/** Great-circle distance in km from this place to ([lat], [lon]). */
+fun Place.distanceKm(lat: Double, lon: Double): Double {
+    val r = 6371.0
+    val dLat = Math.toRadians(lat - latitude)
+    val dLon = Math.toRadians(lon - longitude)
+    val a = Math.sin(dLat / 2).let { it * it } +
+        Math.cos(Math.toRadians(latitude)) * Math.cos(Math.toRadians(lat)) *
+        Math.sin(dLon / 2).let { it * it }
+    return 2 * r * Math.asin(Math.sqrt(a))
+}
+
 enum class Units(
     val tempParam: String,
     val windParam: String,

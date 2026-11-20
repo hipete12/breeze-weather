@@ -73,31 +73,88 @@ fun iconSpec(code: Int): IconSpec = when (code) {
 /** Full-colour icon for a WMO weather [code]. */
 @Composable
 fun WeatherIcon(code: Int, isDay: Boolean, modifier: Modifier = Modifier, contentDescription: String? = null) {
-    // Partly cloudy at night is the stock moon-and-cloud glyph, the one icon that takes a tint.
-    val tint = if (isPartlyCloudyNight(code, isDay)) MoonWhite else Color.Unspecified
-    Icon(weatherIcon(code, isDay), contentDescription = contentDescription, tint = tint, modifier = modifier)
+    Icon(weatherIcon(code, isDay), contentDescription = contentDescription, tint = weatherIconTint(code, isDay), modifier = modifier)
 }
 
 private fun isPartlyCloudyNight(code: Int, isDay: Boolean) = !isDay && iconSpec(code) == IconSpec(IconKind.CLOUD, peek = true)
 
-private val cache = HashMap<Pair<IconSpec, Boolean>, ImageVector>()
+/**
+ * The tint to draw [weatherIcon] with: partly cloudy at night is the stock moon-and-cloud glyph,
+ * the one icon that takes a tint. Every other icon is already in colour ([Color.Unspecified]).
+ */
+fun weatherIconTint(code: Int, isDay: Boolean, palette: IconPalette = IconPalette.Sky): Color =
+    if (isPartlyCloudyNight(code, isDay)) palette.moon else Color.Unspecified
 
-fun weatherIcon(code: Int, isDay: Boolean): ImageVector {
+private val cache = HashMap<Triple<IconSpec, Boolean, IconPalette>, ImageVector>()
+
+/**
+ * The icon for a WMO weather [code]. The default [palette] is for the app's dark, sky-coloured
+ * backgrounds; widgets on light backgrounds use [IconPalette.OnLight] so white clouds stay visible.
+ */
+fun weatherIcon(code: Int, isDay: Boolean, palette: IconPalette = IconPalette.Sky): ImageVector {
     if (isPartlyCloudyNight(code, isDay)) return Icons.Rounded.NightsStay
     val spec = iconSpec(code)
     // Day and night only differ where a sun or moon is drawn.
     val day = isDay || !(spec.kind == IconKind.CLEAR || spec.peek)
-    return cache.getOrPut(spec to day) { buildIcon(spec, day) }
+    return synchronized(cache) { cache.getOrPut(Triple(spec, day, palette)) { buildIcon(spec, day, palette) } }
 }
 
 // ---------- Palette ----------
 
-private val SunGold = Color(0xFFFFD54F)
-private val MoonWhite = Color(0xFFE3E8F5)
-private val DropBlue = Color(0xFF64B5F6)
-private val BoltGold = Color(0xFFFFCA28)
-private val Ice = Color(0xFFE0F2FE)
-private val IceLine = Color(0xFFA5D8F3)
+/** The colours an icon is drawn with. */
+data class IconPalette(
+    val sun: Color,
+    val moon: Color,
+    val drop: Color,
+    val bolt: Color,
+    val ice: Color,
+    val iceLine: Color,
+    val glint: Color,
+    val fog: Color,
+    val snow: Color,
+    /** Top and bottom of a plain cloud's gradient. */
+    val cloud: Pair<Color, Color>,
+    /** A light rain cloud's gradient; heavier rain darkens it towards [heavyRainCloud]. */
+    val lightRainCloud: Pair<Color, Color>,
+    val heavyRainCloud: Pair<Color, Color>,
+    val stormCloud: Pair<Color, Color>,
+) {
+    companion object {
+        /** For the app's dark and sky-coloured backgrounds: white clouds and a pale moon. */
+        val Sky = IconPalette(
+            sun = Color(0xFFFFD54F),
+            moon = Color(0xFFE3E8F5),
+            drop = Color(0xFF64B5F6),
+            bolt = Color(0xFFFFCA28),
+            ice = Color(0xFFE0F2FE),
+            iceLine = Color(0xFFA5D8F3),
+            glint = Color.White,
+            fog = Color.White.copy(alpha = 0.9f),
+            snow = Color.White,
+            cloud = Color.White to Color(0xFFE2E8F0),
+            lightRainCloud = Color(0xFFF7F9FC) to Color(0xFFD9E0EA),
+            heavyRainCloud = Color(0xFFD3DAE4) to Color(0xFFA7B2C2),
+            stormCloud = Color(0xFFB9C2D0) to Color(0xFF7F8A9D),
+        )
+
+        /** For light backgrounds: slate clouds, a deeper sun and stronger blues. */
+        val OnLight = IconPalette(
+            sun = Color(0xFFFFB300),
+            moon = Color(0xFF8C98BE),
+            drop = Color(0xFF3D8EE0),
+            bolt = Color(0xFFFFB300),
+            ice = Color(0xFF8CC4EA),
+            iceLine = Color(0xFF7DB7DE),
+            glint = Color(0xFFE8F4FC),
+            fog = Color(0xFF9AA6B8),
+            snow = Color(0xFF7FA8D4),
+            cloud = Color(0xFFC6D0DD) to Color(0xFF9EACBF),
+            lightRainCloud = Color(0xFFBFCAD8) to Color(0xFF97A5B9),
+            heavyRainCloud = Color(0xFFA3AFC0) to Color(0xFF75839A),
+            stormCloud = Color(0xFF8D98AB) to Color(0xFF5F6B80),
+        )
+    }
+}
 
 // ---------- Layout (24 × 24 viewport) ----------
 
@@ -108,15 +165,15 @@ private const val PEEK_CLOUD_W = 18.4f
 /** Space between the cloud's bottom and whatever falls from it. */
 private const val PRECIP_GAP = 1.4f
 
-private fun buildIcon(spec: IconSpec, day: Boolean): ImageVector =
+private fun buildIcon(spec: IconSpec, day: Boolean, p: IconPalette): ImageVector =
     ImageVector.Builder("Weather_${spec.kind}_${spec.peek}_${spec.count}_${spec.hail}_${spec.freezing}_$day", 24.dp, 24.dp, 24f, 24f).apply {
         if (spec.kind == IconKind.CLEAR) {
-            if (day) sun(12f, 12f, 4.8f, rayFrom = 7f, rayTo = 9.6f, rayWidth = 2f) else crescent(12f, 12f, 7.6f)
+            if (day) sun(12f, 12f, 4.8f, rayFrom = 7f, rayTo = 9.6f, rayWidth = 2f, color = p.sun) else crescent(12f, 12f, 7.6f, color = p.moon)
             return@apply
         }
 
         if (spec.kind == IconKind.CLOUD && spec.peek) {
-            partlyCloudyDay()
+            partlyCloudyDay(p)
             return@apply
         }
 
@@ -135,56 +192,56 @@ private fun buildIcon(spec: IconSpec, day: Boolean): ImageVector =
         // Sun or moon goes first so the cloud covers its lower left.
         if (spec.peek) {
             val (bx, by, r) = Triple(16.6f, 6.6f, 3.3f)
-            if (day) sun(bx, by, r, rayFrom = r + 1.2f, rayTo = r + 2.4f, rayWidth = 1.4f)
+            if (day) sun(bx, by, r, rayFrom = r + 1.2f, rayTo = r + 2.4f, rayWidth = 1.4f, color = p.sun)
             // Bite from the upper left so the moon's bulk shows to the right of the cloud.
-            else crescent(bx + 0.4f, by - 0.2f, r + 0.6f, biteX = -0.55f)
+            else crescent(bx + 0.4f, by - 0.2f, r + 0.6f, biteX = -0.55f, color = p.moon)
         }
 
-        cloud(left, top, cloudW, cloudFill(spec, top, bottom))
+        cloud(left, top, cloudW, cloudFill(spec, top, bottom, p))
 
         val precipTop = bottom + PRECIP_GAP
         when (spec.kind) {
-            IconKind.FOG -> path(stroke = SolidColor(Color.White.copy(alpha = 0.9f)), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round) {
+            IconKind.FOG -> path(stroke = SolidColor(p.fog), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round) {
                 moveTo(4f, bottom + 2.3f); horizontalLineTo(20f)
                 moveTo(6.5f, bottom + 5.6f); horizontalLineTo(17.5f)
             }
             IconKind.DRIZZLE -> {
                 // Freezing drizzle tucks the drops up to leave room for the ice.
-                drop(cx - 2.6f, precipTop + if (spec.freezing) 1.9f else 2.4f)
-                drop(cx + 2.6f, precipTop + if (spec.freezing) 2.7f else 4.6f)
+                drop(cx - 2.6f, precipTop + if (spec.freezing) 1.9f else 2.4f, p.drop)
+                drop(cx + 2.6f, precipTop + if (spec.freezing) 2.7f else 4.6f, p.drop)
             }
-            IconKind.RAIN -> rainStreaks(spec.count, cx, precipTop, scale = if (spec.freezing) 0.7f else 1f)
-            IconKind.SNOW -> snowflakes(spec.count, cx, precipTop)
+            IconKind.RAIN -> rainStreaks(spec.count, cx, precipTop, p.drop, scale = if (spec.freezing) 0.7f else 1f)
+            IconKind.SNOW -> snowflakes(spec.count, cx, precipTop, p.snow)
             IconKind.STORM -> {
-                bolt(cx, bottom - 2.4f)
+                bolt(cx, bottom - 2.4f, p.bolt)
                 if (spec.hail) {
-                    dot(cx - 4.6f, precipTop + 3.4f, 1f, Ice)
-                    dot(cx + 4.8f, precipTop + 2f, 1f, Ice)
+                    dot(cx - 4.6f, precipTop + 3.4f, 1f, p.ice)
+                    dot(cx + 4.8f, precipTop + 2f, 1f, p.ice)
                 }
             }
             IconKind.CLOUD, IconKind.CLEAR -> Unit
         }
-        if (spec.freezing) iceLine(cx, 22f)
+        if (spec.freezing) iceLine(cx, 22f, p)
     }.build()
 
 /** Partly cloudy (day): a smaller white cloud with the sun peeking out behind its top right. */
-private fun ImageVector.Builder.partlyCloudyDay() {
+private fun ImageVector.Builder.partlyCloudyDay(p: IconPalette) {
     val r = 3.6f
-    sun(15.6f, 9.9f, r, rayFrom = r + 1.3f, rayTo = r + 2.5f, rayWidth = 1.5f)
+    sun(15.6f, 9.9f, r, rayFrom = r + 1.3f, rayTo = r + 2.5f, rayWidth = 1.5f, color = p.sun)
     val k = 1.05f
-    cloud(left = -1.9f + CLOUD_X0 * k, top = 6.8f + CLOUD_Y0 * k, width = CLOUD_BASE_W * k, fill = Brush.verticalGradient(listOf(Color.White, Color(0xFFE2E8F0)), startY = 9f, endY = 21f))
+    cloud(left = -1.9f + CLOUD_X0 * k, top = 6.8f + CLOUD_Y0 * k, width = CLOUD_BASE_W * k, fill = Brush.verticalGradient(listOf(p.cloud.first, p.cloud.second), startY = 9f, endY = 21f))
 }
 
-private fun cloudFill(spec: IconSpec, top: Float, bottom: Float): Brush {
+private fun cloudFill(spec: IconSpec, top: Float, bottom: Float, p: IconPalette): Brush {
     val (hi, lo) = when (spec.kind) {
         // Rain clouds darken as the rain gets heavier: 0 light … 1 heavy.
         IconKind.RAIN -> {
             val heaviness = (spec.count - 3) / 2f
-            lerp(Color(0xFFF7F9FC), Color(0xFFD3DAE4), heaviness) to lerp(Color(0xFFD9E0EA), Color(0xFFA7B2C2), heaviness)
+            lerp(p.lightRainCloud.first, p.heavyRainCloud.first, heaviness) to lerp(p.lightRainCloud.second, p.heavyRainCloud.second, heaviness)
         }
-        IconKind.DRIZZLE -> Color(0xFFF7F9FC) to Color(0xFFD9E0EA)
-        IconKind.STORM -> Color(0xFFB9C2D0) to Color(0xFF7F8A9D)
-        else -> Color.White to Color(0xFFE2E8F0)
+        IconKind.DRIZZLE -> p.lightRainCloud
+        IconKind.STORM -> p.stormCloud
+        else -> p.cloud
     }
     return Brush.verticalGradient(listOf(hi, lo), startY = top, endY = bottom)
 }
@@ -219,8 +276,8 @@ private fun ImageVector.Builder.dot(cx: Float, cy: Float, r: Float, color: Color
     close()
 }
 
-private fun ImageVector.Builder.sun(cx: Float, cy: Float, r: Float, rayFrom: Float, rayTo: Float, rayWidth: Float) {
-    path(stroke = SolidColor(SunGold), strokeLineWidth = rayWidth, strokeLineCap = StrokeCap.Round) {
+private fun ImageVector.Builder.sun(cx: Float, cy: Float, r: Float, rayFrom: Float, rayTo: Float, rayWidth: Float, color: Color) {
+    path(stroke = SolidColor(color), strokeLineWidth = rayWidth, strokeLineCap = StrokeCap.Round) {
         for (a in 0 until 360 step 45) {
             val rad = Math.toRadians(a.toDouble())
             val dx = cos(rad).toFloat()
@@ -229,14 +286,14 @@ private fun ImageVector.Builder.sun(cx: Float, cy: Float, r: Float, rayFrom: Flo
             lineTo(cx + dx * rayTo, cy + dy * rayTo)
         }
     }
-    dot(cx, cy, r, SunGold)
+    dot(cx, cy, r, color)
 }
 
 /**
  * A crescent moon: a disc of radius [r] with a bite taken from its top right, or its top left when
  * [biteX] is negative.
  */
-private fun ImageVector.Builder.crescent(cx: Float, cy: Float, r: Float, biteX: Float = 0.55f) {
+private fun ImageVector.Builder.crescent(cx: Float, cy: Float, r: Float, biteX: Float = 0.55f, color: Color) {
     val bx = cx + r * biteX
     val by = cy - r * 0.45f
     val r2 = r * 0.82f
@@ -252,7 +309,7 @@ private fun ImageVector.Builder.crescent(cx: Float, cy: Float, r: Float, biteX: 
     val p1y = cy + l * uy + h * ux
     val p2x = cx + l * ux + h * uy
     val p2y = cy + l * uy - h * ux
-    path(fill = SolidColor(MoonWhite)) {
+    path(fill = SolidColor(color)) {
         moveTo(p1x, p1y)
         arcTo(r, r, 0f, true, true, p2x, p2y) // the outer edge, away from the bite
         arcTo(r2, r2, 0f, false, false, p1x, p1y) // back along the bite
@@ -261,9 +318,9 @@ private fun ImageVector.Builder.crescent(cx: Float, cy: Float, r: Float, biteX: 
 }
 
 /** An upright teardrop whose round bottom is centred at ([cx], [cy]). */
-private fun ImageVector.Builder.drop(cx: Float, cy: Float) {
+private fun ImageVector.Builder.drop(cx: Float, cy: Float, color: Color) {
     val r = 1.35f
-    path(fill = SolidColor(DropBlue)) {
+    path(fill = SolidColor(color)) {
         moveTo(cx, cy - 2.7f)
         lineTo(cx + r * 0.87f, cy - r * 0.5f)
         arcTo(r, r, 0f, true, true, cx - r * 0.87f, cy - r * 0.5f)
@@ -276,14 +333,14 @@ private fun ImageVector.Builder.drop(cx: Float, cy: Float) {
  * each starts a little lower on its line (staggered), keeping the spacing even while looking less
  * mechanical.
  */
-private fun ImageVector.Builder.rainStreaks(n: Int, cx: Float, top: Float, scale: Float = 1f) {
+private fun ImageVector.Builder.rainStreaks(n: Int, cx: Float, top: Float, color: Color, scale: Float = 1f) {
     val spacing = if (n >= 4) 3.0f else 3.3f
     val lengths = listOf(3.2f, 2.6f, 3.4f, 2.7f, 3.1f).map { it * scale }
     val drops = listOf(0f, 1.1f, 0.4f, 1.3f, 0.6f).map { it * scale }
     val slant = 0.38f // leftward run per unit of fall
     // Centre the streaks' midpoints (not their tops) under the cloud.
     val firstX = cx - spacing * (n - 1) / 2 + 0.6f
-    path(stroke = SolidColor(DropBlue), strokeLineWidth = if (n >= 4) 1.45f else 1.65f, strokeLineCap = StrokeCap.Round) {
+    path(stroke = SolidColor(color), strokeLineWidth = if (n >= 4) 1.45f else 1.65f, strokeLineCap = StrokeCap.Round) {
         repeat(n) { i ->
             val len = lengths[i]
             val y = top + drops[i]
@@ -295,17 +352,17 @@ private fun ImageVector.Builder.rainStreaks(n: Int, cx: Float, top: Float, scale
 }
 
 /** The glaze freezing rain leaves: a pale ice line with a bright glint, centred at [cx]. */
-private fun ImageVector.Builder.iceLine(cx: Float, y: Float) {
-    path(stroke = SolidColor(IceLine), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round) {
+private fun ImageVector.Builder.iceLine(cx: Float, y: Float, p: IconPalette) {
+    path(stroke = SolidColor(p.iceLine), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round) {
         moveTo(cx - 7.5f, y); lineTo(cx + 7.5f, y)
     }
-    path(stroke = SolidColor(Color.White), strokeLineWidth = 0.7f, strokeLineCap = StrokeCap.Round) {
+    path(stroke = SolidColor(p.glint), strokeLineWidth = 0.7f, strokeLineCap = StrokeCap.Round) {
         moveTo(cx - 5.6f, y - 0.25f); lineTo(cx - 3.4f, y - 0.25f)
     }
 }
 
 /** Small six-armed flakes in two staggered rows. */
-private fun ImageVector.Builder.snowflakes(n: Int, cx: Float, top: Float) {
+private fun ImageVector.Builder.snowflakes(n: Int, cx: Float, top: Float, color: Color) {
     val r = 1.6f
     val upper = top + r
     val lower = top + r + 2.4f
@@ -314,7 +371,7 @@ private fun ImageVector.Builder.snowflakes(n: Int, cx: Float, top: Float) {
         3 -> listOf(cx - 4.4f to upper, cx to lower, cx + 4.4f to upper)
         else -> listOf(cx - 5.4f to upper, cx - 1.8f to lower, cx + 1.8f to upper, cx + 5.4f to lower)
     }
-    path(stroke = SolidColor(Color.White), strokeLineWidth = 1.1f, strokeLineCap = StrokeCap.Round) {
+    path(stroke = SolidColor(color), strokeLineWidth = 1.1f, strokeLineCap = StrokeCap.Round) {
         spots.forEach { (x, y) ->
             for (a in listOf(90, 30, -30)) {
                 val rad = Math.toRadians(a.toDouble())
@@ -328,7 +385,7 @@ private fun ImageVector.Builder.snowflakes(n: Int, cx: Float, top: Float) {
 }
 
 /** A lightning bolt hanging from the cloud's base, starting at [y0]. */
-private fun ImageVector.Builder.bolt(cx: Float, y0: Float) = path(fill = SolidColor(BoltGold)) {
+private fun ImageVector.Builder.bolt(cx: Float, y0: Float, color: Color) = path(fill = SolidColor(color)) {
     val k = 1.2f
     moveTo(cx + 0.8f * k, y0)
     lineTo(cx - 2.4f * k, y0 + 4.6f * k)

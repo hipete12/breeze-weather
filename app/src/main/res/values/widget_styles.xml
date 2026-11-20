@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget text. Layouts only use WidgetText.* styles; the build generates a copy of each widget
+     layout using the WidgetShadow.* twin, for text drawn straight on the wallpaper. Every
+     WidgetText.X needs a WidgetShadow.X (WidgetResourcesTest checks). -->
+<resources>
+    <style name="WidgetText">
+        <item name="android:textColor">@color/widget_text_system</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="WidgetText.Primary" />
+
+    <style name="WidgetText.Medium">
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="WidgetText.Secondary">
+        <item name="android:textColor">@color/widget_text_system_secondary</item>
+    </style>
+
+    <style name="WidgetText.Label">
+        <item name="android:textColor">@color/widget_text_system_secondary</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.04</item>
+    </style>
+
+    <style name="WidgetText.Temp">
+        <item name="android:fontFamily">sans-serif-light</item>
+    </style>
+
+    <style name="WidgetText.Rain">
+        <item name="android:textColor">@color/widget_rain_system</item>
+    </style>
+
+    <style name="WidgetShadow.Primary" parent="WidgetText.Primary">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">5</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+
+    <style name="WidgetShadow.Medium" parent="WidgetText.Medium">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">5</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+
+    <style name="WidgetShadow.Secondary" parent="WidgetText.Secondary">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">5</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+
+    <style name="WidgetShadow.Label" parent="WidgetText.Label">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">5</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+
+    <style name="WidgetShadow.Temp" parent="WidgetText.Temp">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">6</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+
+    <style name="WidgetShadow.Rain" parent="WidgetText.Rain">
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowRadius">5</item>
+        <item name="android:shadowDy">1</item>
+    </style>
+</resources>

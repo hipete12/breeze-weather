@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -93,6 +94,7 @@ fun LocationsScreen(
     onRestore: (Place, Int) -> Unit,
     onUnits: (Units) -> Unit,
     onRequestLocation: () -> Unit,
+    onOpenWidgets: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -112,7 +114,12 @@ fun LocationsScreen(
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = { UnitToggle(state.units, onUnits) },
+                actions = {
+                    IconButton(onClick = onOpenWidgets) {
+                        Icon(Icons.Rounded.Widgets, contentDescription = "Widgets")
+                    }
+                    UnitToggle(state.units, onUnits)
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

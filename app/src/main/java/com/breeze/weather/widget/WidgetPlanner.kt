@@ -1,0 +1,344 @@
+package com.breeze.weather.widget
+
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+
+/** How the current conditions are laid out. */
+enum class HeaderStyle {
+    NONE,
+
+    /** Icon over temperature, for 1×1-ish widgets. */
+    TINY,
+
+    /** One row: icon, temperature, place and condition, high and low on the right. */
+    COMPACT,
+
+    /** Place, a large temperature, condition and high/low beside a large icon. */
+    BIG,
+}
+
+enum class DayLayout { ROWS, COLUMNS }
+
+/**
+ * What a widget shows at one size: the result of fitting the user's choices into the space.
+ * Sizes are in dp; text sizes in dp too (widget text doesn't follow the system font scale, the
+ * widget's own text size setting replaces it, so layouts stay predictable).
+ */
+data class WidgetPlan(
+    val header: HeaderStyle,
+    val paddingH: Float,
+    val paddingV: Float,
+    val scale: Float,
+    /** Main temperature text size and main icon size, for the TINY and BIG headers. */
+    val tempTextDp: Float = 0f,
+    val iconDp: Float = 0f,
+    /** BIG header: readings shown in a column beside the temperature. */
+    val sideMetrics: Int = 0,
+    /** COMPACT header: room for high/low (and feels like or updated) on the right. */
+    val compactExtras: Boolean = false,
+    /** TINY header: room for the place name under the temperature. */
+    val tinyPlace: Boolean = false,
+    val hours: Int = 0,
+    /** Hourly strip with smaller icons and gaps, for short widgets. */
+    val hourlyCompact: Boolean = false,
+    /** Hourly strip has room for the chance-of-rain line. */
+    val hourlyRain: Boolean = false,
+    val days: Int = 0,
+    val dayLayout: DayLayout = DayLayout.ROWS,
+    val detailColumns: Int = 0,
+    val detailRows: Int = 0,
+    /** Details as a list of label–value lines instead of tiles, for narrow widgets. */
+    val detailList: Boolean = false,
+    /** Sections that fit, in display order. */
+    val sections: List<WidgetSection> = emptyList(),
+) {
+    val detailCount: Int get() = detailColumns * detailRows
+}
+
+/** Base dimensions at text size "Default"; everything scales with the widget's text size. */
+object WidgetDimens {
+    const val PAD_H = 14f
+    const val PAD_V = 12f
+    const val PAD_SMALL = 8f
+    const val GAP = 8f
+
+    const val COMPACT_H = 46f
+    const val COMPACT_ICON = 38f
+    const val COMPACT_TEMP = 28f
+
+    const val HOUR_CELL_W = 44f
+    const val HOURLY_H = 64f
+    const val HOURLY_COMPACT_H = 54f
+    const val RAIN_LINE = 15f
+
+    const val DAY_ROW_H = 26f
+    const val DAY_COL_W = 46f
+    const val DAY_COLS_H = 82f
+
+    const val TILE_W = 78f
+    const val TILE_H = 46f
+    const val TILE_GAP = 6f
+    const val LINE_H = 22f
+
+    const val SIDE_COLUMN_W = 104f
+    const val SIDE_LINE_H = 32f
+
+    // Text sizes.
+    const val TEXT_PLACE = 14f
+    const val TEXT_BODY = 13f
+    const val TEXT_SMALL = 12f
+    const val TEXT_TINY = 11f
+    const val TEXT_CELL_TEMP = 14f
+    const val TEXT_TILE_VALUE = 16f
+
+    /** Line heights used for the BIG header's text under and over the temperature. */
+    const val LINE_PLACE = 20f
+    const val LINE_DESC = 18f
+    const val LINE_HIGH_LOW = 17f
+    const val LINE_UPDATED = 15f
+
+    const val MAX_HOURS = 12
+    const val MAX_DAY_COLUMNS = 7
+}
+
+/** Fits a widget's content into its size. Pure logic, so it is unit tested without a device. */
+object WidgetPlanner {
+
+    /**
+     * @param tempText the main temperature as shown (e.g. "-12°"), to size it so it fits.
+     * @param availableHours / availableDays how many forecast columns or rows there's data for.
+     */
+    fun plan(
+        kind: WidgetKind,
+        config: WidgetConfig,
+        widthDp: Float,
+        heightDp: Float,
+        tempText: String = "21°",
+        availableHours: Int = 24,
+        availableDays: Int = 10,
+    ): WidgetPlan {
+        val s = config.textScale.factor
+        val padH = if (widthDp < 120f) WidgetDimens.PAD_SMALL else WidgetDimens.PAD_H
+        val padV = when {
+            heightDp < 70f -> WidgetDimens.PAD_SMALL * 0.75f
+            heightDp < 100f -> WidgetDimens.PAD_SMALL
+            else -> WidgetDimens.PAD_V
+        }
+        val innerW = max(0f, widthDp - 2 * padH)
+        val innerH = max(0f, heightDp - 2 * padV)
+        val base = WidgetPlan(HeaderStyle.NONE, padH, padV, s)
+
+        if (kind == WidgetKind.NOW) return planNow(base, config, innerW, innerH, tempText)
+
+        // Sections the user wants, with the kind's primary section first, then in display order.
+        val wanted = WidgetSection.entries.filter { it in config.sections }
+            .filterNot { it == WidgetSection.DETAILS && config.metrics.isEmpty() }
+            .filterNot { it == WidgetSection.HOURLY && availableHours < 2 }
+            .filterNot { it == WidgetSection.DAILY && availableDays < 1 }
+        if (wanted.isEmpty()) return planHeaderOnly(base, config, innerW, innerH, tempText)
+        val priority = wanted.sortedBy { if (it == kind.primarySection) -1 else it.ordinal }
+
+        val rowH = WidgetDimens.DAY_ROW_H * s
+        val colsH = (WidgetDimens.DAY_COLS_H + if (config.showRainChance) WidgetDimens.RAIN_LINE else 0f) * s
+        val tileH = WidgetDimens.TILE_H * s
+        val lineH = WidgetDimens.LINE_H * s
+        val gap = WidgetDimens.GAP * s
+        val tileColumns = floor((innerW + WidgetDimens.TILE_GAP * s) / ((WidgetDimens.TILE_W + WidgetDimens.TILE_GAP) * s)).toInt()
+        // Too narrow for two tiles side by side: list the readings instead.
+        val detailList = tileColumns < 2
+        val dayColumns = min(min(WidgetDimens.MAX_DAY_COLUMNS, availableDays), floor(innerW / (WidgetDimens.DAY_COL_W * s)).toInt())
+        val minDayRows = min(2, availableDays)
+
+        // First pass: give each section, by priority, the least space it can work with.
+        var remaining = innerH
+        val alloc = LinkedHashMap<WidgetSection, Float>()
+        var dayLayout = DayLayout.ROWS
+        for (section in priority) {
+            val sep = if (alloc.isEmpty()) 0f else gap
+            val need = when (section) {
+                WidgetSection.HEADER -> WidgetDimens.COMPACT_H * s
+                WidgetSection.HOURLY -> if (innerW >= 3 * WidgetDimens.HOUR_CELL_W * s) WidgetDimens.HOURLY_COMPACT_H * s else Float.MAX_VALUE
+                WidgetSection.DAILY -> when {
+                    minDayRows * rowH + sep <= remaining -> { dayLayout = DayLayout.ROWS; minDayRows * rowH }
+                    dayColumns >= 3 && colsH + sep <= remaining -> { dayLayout = DayLayout.COLUMNS; colsH }
+                    else -> Float.MAX_VALUE
+                }
+                WidgetSection.DETAILS -> if (detailList) lineH else tileH
+            }
+            if (need + sep <= remaining) {
+                alloc[section] = need
+                remaining -= need + sep
+            }
+        }
+        if (alloc.isEmpty() || alloc.keys == setOf(WidgetSection.HEADER)) {
+            return planHeaderOnly(base, config, innerW, innerH, tempText)
+        }
+
+        // Second pass: spread what's left over the sections that can grow. The hourly strip
+        // first gets its full size (and the rain line), then daily rows, then details.
+        if (WidgetSection.HOURLY in alloc) {
+            val targets = listOfNotNull(WidgetDimens.HOURLY_H, if (config.showRainChance) WidgetDimens.HOURLY_H + WidgetDimens.RAIN_LINE else null)
+            for (target in targets) {
+                val extra = target * s - alloc.getValue(WidgetSection.HOURLY)
+                if (extra in 0f..remaining) {
+                    alloc[WidgetSection.HOURLY] = target * s
+                    remaining -= extra
+                }
+            }
+        }
+        val hourlyH = alloc[WidgetSection.HOURLY] ?: 0f
+
+        var days = 0
+        if (WidgetSection.DAILY in alloc) {
+            if (dayLayout == DayLayout.ROWS) {
+                val space = alloc.getValue(WidgetSection.DAILY) + remaining
+                days = min(availableDays, floor(space / rowH).toInt())
+                val used = days * rowH
+                remaining = space - used
+                alloc[WidgetSection.DAILY] = used
+                // A few rows in a short, wide widget read better as columns.
+                if (days <= 2 && dayColumns >= 4 && space >= colsH) {
+                    dayLayout = DayLayout.COLUMNS
+                    remaining = space - colsH
+                    alloc[WidgetSection.DAILY] = colsH
+                }
+            }
+            if (dayLayout == DayLayout.COLUMNS) days = dayColumns
+        }
+
+        var detailColumns = 0
+        var detailRows = 0
+        if (WidgetSection.DETAILS in alloc && detailList) {
+            val space = alloc.getValue(WidgetSection.DETAILS) + remaining
+            detailColumns = 1
+            detailRows = min(config.metrics.size, max(1, floor(space / lineH).toInt()))
+        } else if (WidgetSection.DETAILS in alloc) {
+            val count = config.metrics.size
+            detailColumns = min(count, max(1, tileColumns)).coerceIn(1, 4)
+            val space = alloc.getValue(WidgetSection.DETAILS) + remaining
+            val rowsThatFit = max(1, floor((space + WidgetDimens.TILE_GAP * s) / (tileH + WidgetDimens.TILE_GAP * s)).toInt())
+            val rowsNeeded = (count + detailColumns - 1) / detailColumns
+            detailRows = min(rowsThatFit, rowsNeeded)
+            // Rebalance so a 5-tile 3+2 grid doesn't become 4+1.
+            if (detailRows > 0) detailColumns = min(detailColumns, (min(count, detailColumns * detailRows) + detailRows - 1) / detailRows)
+        }
+
+        val hours = if (WidgetSection.HOURLY in alloc) {
+            floor(innerW / (WidgetDimens.HOUR_CELL_W * s)).toInt().coerceIn(3, WidgetDimens.MAX_HOURS).coerceAtMost(availableHours)
+        } else 0
+
+        val hasHeader = WidgetSection.HEADER in alloc
+        return base.copy(
+            header = if (hasHeader) HeaderStyle.COMPACT else HeaderStyle.NONE,
+            compactExtras = hasHeader && compactHasExtras(config, innerW, s),
+            hours = hours,
+            hourlyCompact = hours > 0 && hourlyH < WidgetDimens.HOURLY_H * s - 0.01f,
+            hourlyRain = hours > 0 && config.showRainChance && hourlyH >= (WidgetDimens.HOURLY_H + WidgetDimens.RAIN_LINE) * s - 0.01f,
+            days = days,
+            dayLayout = dayLayout,
+            detailColumns = detailColumns,
+            detailRows = detailRows,
+            detailList = detailList && detailRows > 0,
+            sections = WidgetSection.entries.filter { it in alloc },
+        )
+    }
+
+    private fun compactHasExtras(config: WidgetConfig, innerW: Float, s: Float) =
+        (config.showHighLow || config.showFeelsLike || config.showUpdated) && innerW >= 220f * s
+
+    private fun planNow(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+        val s = config.textScale.factor
+        return when {
+            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, tempText, allowSide = false)
+            innerW >= 120f * s && innerH < 100f * s -> base.copy(
+                header = HeaderStyle.COMPACT,
+                compactExtras = compactHasExtras(config, innerW, s),
+                sections = listOf(WidgetSection.HEADER),
+            )
+            else -> planTiny(base, config, innerW, innerH, tempText)
+        }
+    }
+
+    private fun planHeaderOnly(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+        val s = config.textScale.factor
+        return when {
+            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, tempText, allowSide = true)
+            innerW >= 120f * s -> base.copy(
+                header = HeaderStyle.COMPACT,
+                compactExtras = compactHasExtras(config, innerW, s),
+                sections = listOf(WidgetSection.HEADER),
+            )
+            else -> planTiny(base, config, innerW, innerH, tempText)
+        }
+    }
+
+    /** Height of the BIG header's text lines other than the temperature. */
+    private fun bigTextHeight(config: WidgetConfig): Float {
+        val s = config.textScale.factor
+        var h = 0f
+        if (config.showPlace) h += WidgetDimens.LINE_PLACE
+        if (config.showCondition) h += WidgetDimens.LINE_DESC
+        if (config.showHighLow || config.showFeelsLike) h += WidgetDimens.LINE_HIGH_LOW
+        if (config.showUpdated) h += WidgetDimens.LINE_UPDATED
+        return h * s
+    }
+
+    private fun bigMinHeight(config: WidgetConfig) = bigTextHeight(config) + MIN_BIG_TEMP * TEMP_LINE
+
+    private fun planBig(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String, allowSide: Boolean): WidgetPlan {
+        val s = config.textScale.factor
+        val sideMetrics = if (allowSide && innerW >= 250f * s) {
+            min(min(3, config.metrics.size), floor(innerH / (WidgetDimens.SIDE_LINE_H * s)).toInt())
+        } else 0
+        val sideW = if (sideMetrics > 0) WidgetDimens.SIDE_COLUMN_W * s else 0f
+        val chars = tempWidthEm(tempText)
+        var temp = ((innerH - bigTextHeight(config)) / TEMP_LINE).coerceIn(MIN_BIG_TEMP, MAX_BIG_TEMP * s)
+        // Leave room for an icon of at least MIN_BIG_ICON beside the temperature.
+        val maxTempForWidth = (innerW - sideW - MIN_BIG_ICON - 8f) / chars
+        temp = min(temp, max(MIN_BIG_TEMP * 0.8f, maxTempForWidth))
+        // The place sits on its own line above, so the icon shares only the rows below it.
+        val belowPlace = innerH - if (config.showPlace) WidgetDimens.LINE_PLACE * s else 0f
+        val icon = min(belowPlace * 0.8f, innerW - sideW - temp * chars - 8f).coerceIn(MIN_BIG_ICON * 0.8f, MAX_BIG_ICON * s)
+        return base.copy(
+            header = HeaderStyle.BIG,
+            tempTextDp = temp,
+            iconDp = icon,
+            sideMetrics = sideMetrics,
+            sections = listOf(WidgetSection.HEADER),
+        )
+    }
+
+    private fun planTiny(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+        val s = config.textScale.factor
+        val temp = min(innerW / tempWidthEm(tempText), innerH * 0.34f).coerceIn(12f, 40f * s)
+        val placeLine = WidgetDimens.TEXT_TINY * s * 1.35f
+        val withPlace = config.showPlace && innerH - temp * 1.2f - placeLine >= 28f
+        val iconSpace = innerH - temp * 1.2f - if (withPlace) placeLine else 0f
+        val icon = min(innerW * 0.8f, iconSpace).coerceIn(14f, 72f)
+        return base.copy(
+            header = HeaderStyle.TINY,
+            tempTextDp = temp,
+            iconDp = icon,
+            tinyPlace = withPlace,
+            sections = listOf(WidgetSection.HEADER),
+        )
+    }
+
+    /** Approximate width of [text] in ems for the light temperature font. */
+    fun tempWidthEm(text: String): Float =
+        text.sumOf { c ->
+            when {
+                c.isDigit() -> 0.56
+                c == '°' -> 0.34
+                c == '-' || c == '−' -> 0.36
+                else -> 0.5
+            }
+        }.toFloat().coerceAtLeast(1f)
+
+    private const val TEMP_LINE = 1.18f
+    private const val MIN_BIG_TEMP = 30f
+    private const val MAX_BIG_TEMP = 64f
+    private const val MIN_BIG_ICON = 34f
+    private const val MAX_BIG_ICON = 84f
+}

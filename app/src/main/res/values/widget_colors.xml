@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "System" widget theme. Widget layouts use these as their defaults; the launcher resolves
+     them, so they follow light/dark mode (and Material You on Android 12+). Other themes set their
+     colours from code. -->
+<resources>
+    <color name="widget_bg_system">#FFF3F5FA</color>
+    <color name="widget_text_system">#FF1A1F2B</color>
+    <color name="widget_text_system_secondary">#FF5B6577</color>
+    <color name="widget_rain_system">#FF1F6FD1</color>
+</resources>

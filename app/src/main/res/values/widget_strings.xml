@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_now">Now</string>
+    <string name="widget_now_description">Temperature and conditions at a glance</string>
+    <string name="widget_conditions">Current conditions</string>
+    <string name="widget_conditions_description">Today\'s temperature, conditions and high and low</string>
+    <string name="widget_hourly">Hourly forecast</string>
+    <string name="widget_hourly_description">Current conditions and the next hours</string>
+    <string name="widget_daily">Daily forecast</string>
+    <string name="widget_daily_description">Current conditions and the days ahead</string>
+    <string name="widget_details">Weather details</string>
+    <string name="widget_details_description">Feels like, humidity, wind, UV and more</string>
+    <string name="widget_forecast">Complete forecast</string>
+    <string name="widget_forecast_description">Now, hourly and daily in one large widget</string>
+</resources>
