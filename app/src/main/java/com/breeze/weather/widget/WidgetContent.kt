@@ -35,7 +35,7 @@ data class DayCell(
  *
  * @param value the short form that fits a narrow tile; [wideValue] adds context when there's room.
  */
-data class MetricText(val label: String, val value: String, val wideValue: String = value)
+data class MetricText(val label: String, val value: String, val wideValue: String = value, val shortLabel: String = label)
 
 /** Turns a forecast into the text and values widgets show. Pure, so it's unit tested. */
 object WidgetContent {
@@ -81,8 +81,8 @@ object WidgetContent {
         return 1 + later / step.coerceAtLeast(1)
     }
 
-    fun dayCells(weather: Weather, count: Int): List<DayCell> {
-        val today = weather.localNow().toLocalDate()
+    fun dayCells(weather: Weather, count: Int, now: LocalDateTime = weather.localNow()): List<DayCell> {
+        val today = now.toLocalDate()
         return weather.daily.take(count).mapIndexed { i, d -> DayCell(i, formatDay(d.date, today), d) }
     }
 
@@ -92,7 +92,10 @@ object WidgetContent {
         return days.minOf { it.day.low } to days.maxOf { it.day.high }
     }
 
-    fun metric(metric: Metric, weather: Weather, use24h: Boolean): MetricText {
+    fun metric(metric: Metric, weather: Weather, use24h: Boolean, now: LocalDateTime = weather.localNow()): MetricText =
+        metricText(metric, weather, use24h, now).copy(shortLabel = metric.shortLabel)
+
+    private fun metricText(metric: Metric, weather: Weather, use24h: Boolean, now: LocalDateTime): MetricText {
         val c = weather.current
         val today = weather.daily.firstOrNull()
         return when (metric) {
@@ -109,12 +112,12 @@ object WidgetContent {
             }
             Metric.RAIN_CHANCE -> MetricText(metric.label, today?.let { "${it.precipitationChance}%" } ?: "–")
             Metric.PRECIPITATION -> {
-                val date = weather.localNow().toLocalDate()
+                val date = now.toLocalDate()
                 val total = weather.hoursOn(date).sumOf { it.precipitation ?: 0.0 }
-                MetricText("Rain today", formatPrecip(total, weather.units))
+                MetricText(metric.label, formatPrecip(total, weather.units))
             }
-            Metric.SUNRISE -> MetricText(metric.label, nextSunEvent(weather, sunrise = true)?.let { formatClock(it, use24h) } ?: "–")
-            Metric.SUNSET -> MetricText(metric.label, nextSunEvent(weather, sunrise = false)?.let { formatClock(it, use24h) } ?: "–")
+            Metric.SUNRISE -> MetricText(metric.label, nextSunEvent(weather, sunrise = true, now)?.let { formatClock(it, use24h) } ?: "–")
+            Metric.SUNSET -> MetricText(metric.label, nextSunEvent(weather, sunrise = false, now)?.let { formatClock(it, use24h) } ?: "–")
             Metric.CLOUD_COVER -> {
                 val hour = c.time.truncatedTo(ChronoUnit.HOURS)
                 val cover = weather.hours.firstOrNull { it.time == hour }?.cloudCover
@@ -125,8 +128,7 @@ object WidgetContent {
     }
 
     /** Today's sunrise or sunset if it's still ahead, otherwise tomorrow's. */
-    fun nextSunEvent(weather: Weather, sunrise: Boolean): LocalDateTime? {
-        val now = weather.localNow()
+    fun nextSunEvent(weather: Weather, sunrise: Boolean, now: LocalDateTime = weather.localNow()): LocalDateTime? {
         return weather.daily.asSequence()
             .mapNotNull { if (sunrise) it.sunrise else it.sunset }
             .firstOrNull { !it.isBefore(now) }

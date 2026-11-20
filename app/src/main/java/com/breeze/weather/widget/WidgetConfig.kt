@@ -92,19 +92,23 @@ enum class TapAction(val label: String) {
     SETTINGS("Widget settings"),
 }
 
-/** Readings the details section (and the side of a wide current-conditions widget) can show. */
+/**
+ * Readings the details section (and the side of a wide current-conditions widget) can show.
+ *
+ * @param shortLabel for tiles and the side column, where space is tight.
+ */
 @Serializable
-enum class Metric(val label: String) {
+enum class Metric(val label: String, val shortLabel: String = label) {
     FEELS_LIKE("Feels like"),
     HUMIDITY("Humidity"),
     WIND("Wind"),
     UV("UV index"),
-    RAIN_CHANCE("Chance of rain"),
-    PRECIPITATION("Precipitation"),
+    RAIN_CHANCE("Chance of rain", "Rain"),
+    PRECIPITATION("Precipitation", "Rain today"),
     SUNRISE("Sunrise"),
     SUNSET("Sunset"),
-    CLOUD_COVER("Cloud cover"),
-    HIGH_LOW("High / low");
+    CLOUD_COVER("Cloud cover", "Clouds"),
+    HIGH_LOW("High / low", "High/low");
 
     companion object {
         val DEFAULT = listOf(FEELS_LIKE, HUMIDITY, WIND, RAIN_CHANCE)

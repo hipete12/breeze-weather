@@ -81,7 +81,8 @@ object WidgetDimens {
     const val TILE_GAP = 6f
     const val LINE_H = 22f
 
-    const val SIDE_COLUMN_W = 104f
+    /** The side column's fixed width plus its start margin (widget_header_big.xml); not scaled. */
+    const val SIDE_COLUMN_W = 108f
     const val SIDE_LINE_H = 32f
 
     // Text sizes.
@@ -102,6 +103,16 @@ object WidgetDimens {
     const val MAX_DAY_COLUMNS = 7
 }
 
+/** Measures text in dp for a given text size in dp. */
+fun interface TextMeasure {
+    fun widthDp(text: String, sizeDp: Float): Float
+
+    companion object {
+        /** A rough guess from character widths, for tests; on a device, measure with the real font. */
+        val Estimate = TextMeasure { text, size -> WidgetPlanner.tempWidthEm(text) * size }
+    }
+}
+
 /** Fits a widget's content into its size. Pure logic, so it is unit tested without a device. */
 object WidgetPlanner {
 
@@ -117,6 +128,7 @@ object WidgetPlanner {
         tempText: String = "21°",
         availableHours: Int = 24,
         availableDays: Int = 10,
+        measure: TextMeasure = TextMeasure.Estimate,
     ): WidgetPlan {
         val s = config.textScale.factor
         val padH = if (widthDp < 120f) WidgetDimens.PAD_SMALL else WidgetDimens.PAD_H
@@ -129,14 +141,16 @@ object WidgetPlanner {
         val innerH = max(0f, heightDp - 2 * padV)
         val base = WidgetPlan(HeaderStyle.NONE, padH, padV, s)
 
-        if (kind == WidgetKind.NOW) return planNow(base, config, innerW, innerH, tempText)
+        // Width of the temperature per dp of text size; text width scales linearly with size.
+        val em = measure.widthDp(tempText, 100f) / 100f
+        if (kind == WidgetKind.NOW) return planNow(base, config, innerW, innerH, em)
 
         // Sections the user wants, with the kind's primary section first, then in display order.
         val wanted = WidgetSection.entries.filter { it in config.sections }
             .filterNot { it == WidgetSection.DETAILS && config.metrics.isEmpty() }
             .filterNot { it == WidgetSection.HOURLY && availableHours < 2 }
             .filterNot { it == WidgetSection.DAILY && availableDays < 1 }
-        if (wanted.isEmpty()) return planHeaderOnly(base, config, innerW, innerH, tempText)
+        if (wanted.isEmpty()) return planHeaderOnly(base, config, innerW, innerH, em)
         val priority = wanted.sortedBy { if (it == kind.primarySection) -1 else it.ordinal }
 
         val rowH = WidgetDimens.DAY_ROW_H * s
@@ -172,7 +186,7 @@ object WidgetPlanner {
             }
         }
         if (alloc.isEmpty() || alloc.keys == setOf(WidgetSection.HEADER)) {
-            return planHeaderOnly(base, config, innerW, innerH, tempText)
+            return planHeaderOnly(base, config, innerW, innerH, em)
         }
 
         // Second pass: spread what's left over the sections that can grow. The hourly strip
@@ -247,29 +261,29 @@ object WidgetPlanner {
     private fun compactHasExtras(config: WidgetConfig, innerW: Float, s: Float) =
         (config.showHighLow || config.showFeelsLike || config.showUpdated) && innerW >= 220f * s
 
-    private fun planNow(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+    private fun planNow(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, em: Float): WidgetPlan {
         val s = config.textScale.factor
         return when {
-            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, tempText, allowSide = false)
+            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, em, allowSide = false)
             innerW >= 120f * s && innerH < 100f * s -> base.copy(
                 header = HeaderStyle.COMPACT,
                 compactExtras = compactHasExtras(config, innerW, s),
                 sections = listOf(WidgetSection.HEADER),
             )
-            else -> planTiny(base, config, innerW, innerH, tempText)
+            else -> planTiny(base, config, innerW, innerH, em)
         }
     }
 
-    private fun planHeaderOnly(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+    private fun planHeaderOnly(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, em: Float): WidgetPlan {
         val s = config.textScale.factor
         return when {
-            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, tempText, allowSide = true)
+            innerH >= bigMinHeight(config) && innerW >= 110f * s -> planBig(base, config, innerW, innerH, em, allowSide = true)
             innerW >= 120f * s -> base.copy(
                 header = HeaderStyle.COMPACT,
                 compactExtras = compactHasExtras(config, innerW, s),
                 sections = listOf(WidgetSection.HEADER),
             )
-            else -> planTiny(base, config, innerW, innerH, tempText)
+            else -> planTiny(base, config, innerW, innerH, em)
         }
     }
 
@@ -286,13 +300,13 @@ object WidgetPlanner {
 
     private fun bigMinHeight(config: WidgetConfig) = bigTextHeight(config) + MIN_BIG_TEMP * TEMP_LINE
 
-    private fun planBig(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String, allowSide: Boolean): WidgetPlan {
+    private fun planBig(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, em: Float, allowSide: Boolean): WidgetPlan {
         val s = config.textScale.factor
         val sideMetrics = if (allowSide && innerW >= 250f * s) {
             min(min(3, config.metrics.size), floor(innerH / (WidgetDimens.SIDE_LINE_H * s)).toInt())
         } else 0
-        val sideW = if (sideMetrics > 0) WidgetDimens.SIDE_COLUMN_W * s else 0f
-        val chars = tempWidthEm(tempText)
+        val sideW = if (sideMetrics > 0) WidgetDimens.SIDE_COLUMN_W else 0f
+        val chars = em
         var temp = ((innerH - bigTextHeight(config)) / TEMP_LINE).coerceIn(MIN_BIG_TEMP, MAX_BIG_TEMP * s)
         // Leave room for an icon of at least MIN_BIG_ICON beside the temperature.
         val maxTempForWidth = (innerW - sideW - MIN_BIG_ICON - 8f) / chars
@@ -309,9 +323,9 @@ object WidgetPlanner {
         )
     }
 
-    private fun planTiny(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, tempText: String): WidgetPlan {
+    private fun planTiny(base: WidgetPlan, config: WidgetConfig, innerW: Float, innerH: Float, em: Float): WidgetPlan {
         val s = config.textScale.factor
-        val temp = min(innerW / tempWidthEm(tempText), innerH * 0.34f).coerceIn(12f, 40f * s)
+        val temp = min(innerW / em, innerH * 0.34f).coerceIn(12f, 40f * s)
         val placeLine = WidgetDimens.TEXT_TINY * s * 1.35f
         val withPlace = config.showPlace && innerH - temp * 1.2f - placeLine >= 28f
         val iconSpace = innerH - temp * 1.2f - if (withPlace) placeLine else 0f
@@ -339,6 +353,6 @@ object WidgetPlanner {
     private const val TEMP_LINE = 1.18f
     private const val MIN_BIG_TEMP = 30f
     private const val MAX_BIG_TEMP = 64f
-    private const val MIN_BIG_ICON = 34f
+    private const val MIN_BIG_ICON = 42f
     private const val MAX_BIG_ICON = 84f
 }

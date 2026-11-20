@@ -5,6 +5,8 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -60,6 +62,20 @@ class WidgetRenderer(private val context: Context) {
     private val use24h = DateFormat.is24HourFormat(context)
 
     /**
+     * Measures the temperature with the font the launcher will draw it in (the system's light
+     * sans serif, which follows custom system fonts such as Samsung's), with a little slack.
+     */
+    private val tempMeasure = run {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
+        TextMeasure { text, size ->
+            synchronized(paint) {
+                paint.textSize = size
+                paint.measureText(text) * 1.06f + 2f
+            }
+        }
+    }
+
+    /**
      * RemoteViews covering every size the widget can currently be shown at: one layout per size
      * the launcher reports on Android 12+, portrait and landscape before that.
      */
@@ -107,6 +123,7 @@ class WidgetRenderer(private val context: Context) {
             kind, config, widthDp, heightDp, tempText,
             availableHours = WidgetContent.availableHours(weather, config.hourStep),
             availableDays = weather.daily.size,
+            measure = tempMeasure,
         )
         val padH = plan?.paddingH ?: WidgetDimens.PAD_SMALL
         val padV = plan?.paddingV ?: WidgetDimens.PAD_SMALL
@@ -358,7 +375,7 @@ class WidgetRenderer(private val context: Context) {
                     continue
                 }
                 val m = WidgetContent.metric(metric, c.weather, use24h)
-                text(v, labels[i], m.label, 10f * c.s, c.style.secondary, c.style)
+                text(v, labels[i], m.shortLabel, 10f * c.s, c.style.secondary, c.style)
                 text(v, values[i], m.wideValue, WidgetDimens.TEXT_PLACE * c.s, c.style.primary, c.style)
             }
         }
@@ -459,7 +476,7 @@ class WidgetRenderer(private val context: Context) {
                 val v = RemoteViews(pkg, layout(c.style, R.layout.widget_detail_tile))
                 val m = WidgetContent.metric(metric, c.weather, use24h)
                 v.setImageViewBitmap(R.id.tile_icon, c.bitmaps.glyph(glyph(metric), 13f * c.s))
-                text(v, R.id.tile_label, m.label, 10f * c.s, c.style.secondary, c.style)
+                text(v, R.id.tile_label, m.shortLabel, 10f * c.s, c.style.secondary, c.style)
                 text(v, R.id.tile_value, if (tileWidth >= 112f * c.s) m.wideValue else m.value, WidgetDimens.TEXT_TILE_VALUE * c.s, c.style.primary, c.style)
                 if (!c.style.system) {
                     v.setInt(R.id.tile_bg, "setColorFilter", c.style.primary)
