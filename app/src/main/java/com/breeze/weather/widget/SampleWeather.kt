@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  */
 object SampleWeather {
 
-    val place = Place(id = "sample", name = "San Francisco", region = "California", country = "United States", latitude = 37.77, longitude = -122.42)
+    val place = Place(id = "sample", name = "Lisbon", region = "Lisbon", country = "Portugal", latitude = 38.72, longitude = -9.14)
 
     fun create(
         units: Units = Units.METRIC,

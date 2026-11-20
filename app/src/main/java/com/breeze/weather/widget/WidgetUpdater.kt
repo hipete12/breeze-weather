@@ -154,9 +154,13 @@ object WidgetUpdater {
         update(context, widgets)
     }
 
-    private suspend fun updateDeviceLocation(sources: Sources) {
+    internal suspend fun updateDeviceLocation(sources: Sources) {
         runCatching {
-            val fix = sources.locator.currentLocation()
+            // Background requests are throttled to a few an hour, so don't wait long for a fresh
+            // fix; fall back to the newest location any app has obtained.
+            val fix = withTimeoutOrNull(10_000) { runCatching { sources.locator.currentLocation() }.getOrNull() }
+                ?: sources.locator.newestLastKnown()
+                ?: return
             val previous = sources.places.lastCurrentPlace
             // Keep the old name if we haven't moved far (saves a geocoder call), like the app does.
             val place = if (previous != null && previous.distanceKm(fix.latitude, fix.longitude) < 0.5) {

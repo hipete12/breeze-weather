@@ -46,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Button
@@ -64,6 +65,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -102,6 +104,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * Customizes one widget, with a live preview drawn over the home screen wallpaper. Opened by the
@@ -397,7 +400,7 @@ private fun WidgetConfigScreen(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                    TextButton(onClick = onClose) { Text("Cancel") }
                     Button(onClick = onSave, modifier = Modifier.weight(1f)) {
                         Text(
                             when (state.mode) {
@@ -533,10 +536,10 @@ private fun StyleSection(config: WidgetConfig, onChange: ((WidgetConfig) -> Widg
     LabeledRow("Background", "$opacity%")
     Slider(
         value = opacity.toFloat(),
-        onValueChange = { opacity = it.toInt() },
+        // Steps of 5%, without the slider's tick marks.
+        onValueChange = { opacity = (it / 5).roundToInt() * 5 },
         onValueChangeFinished = { onChange { c -> c.copy(opacity = opacity) } },
         valueRange = 0f..100f,
-        steps = 19,
         modifier = Modifier.padding(horizontal = 20.dp),
     )
     LabeledRow("Text size", null)
@@ -576,6 +579,9 @@ private fun ThemeSwatch(theme: WidgetTheme, selected: Boolean, onClick: () -> Un
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp)) }
+            } else if (theme == WidgetTheme.SYSTEM) {
+                // Half light, half dark: no single text colour reads on both.
+                Icon(Icons.Rounded.Contrast, contentDescription = null, tint = Color(0xFF8A93A6), modifier = Modifier.size(22.dp))
             } else {
                 Text("21°", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Light)
             }

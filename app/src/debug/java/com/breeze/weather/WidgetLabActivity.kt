@@ -1,6 +1,11 @@
 package com.breeze.weather
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Bundle
+import android.util.Log
+import android.view.View
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,6 +38,12 @@ import com.breeze.weather.widget.WidgetRenderer
 import com.breeze.weather.widget.WidgetSection
 import com.breeze.weather.widget.WidgetStore
 import com.breeze.weather.widget.WidgetTheme
+import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.math.roundToInt
 
 /**
  * Debug-only: renders widgets at several sizes over the wallpaper, with sample weather, for
@@ -45,7 +56,14 @@ import com.breeze.weather.widget.WidgetTheme
  *
  * Extras: kind, theme (SKY|SYSTEM|DARK|LIGHT), opacity (0-100), scale (SMALL|DEFAULT|LARGE),
  * sizes (WxH,…), units (METRIC|IMPERIAL), sections (HEADER,HOURLY,…), state (READY|LOADING|
- * NO_LOCATION|ERROR), config (a WidgetConfig as JSON, overriding the rest).
+ * NO_LOCATION|ERROR), hour (0-23, the sample weather's time of day), config (a WidgetConfig as
+ * JSON, overriding the rest).
+ *
+ * With --ez export true it instead writes each kind's widget-picker preview (default size, sample
+ * weather at [hour]) as a transparent PNG to the app's external files dir, then finishes:
+ *
+ *   adb shell am start -n com.breeze.weather/.WidgetLabActivity --ez export true --ei hour 13
+ *   adb pull /sdcard/Android/data/com.breeze.weather/files/previews
  */
 class WidgetLabActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,8 +80,15 @@ class WidgetLabActivity : ComponentActivity() {
         val sizes = intent.getStringExtra("sizes")?.split(',')?.map { s -> s.split('x').let { it[0].toFloat() to it[1].toFloat() } }
             ?: defaultSizes(kind)
 
-        val data = WidgetData(SampleWeather.place, SampleWeather.create(units).takeIf { state == DataState.READY }, state)
+        val now = if (intent.hasExtra("hour")) LocalDate.now().atTime(intent.getIntExtra("hour", 12), 20) else LocalDateTime.now()
+        val sample = SampleWeather.create(units, utcOffsetSeconds = ZoneId.systemDefault().rules.getOffset(Instant.now()).totalSeconds, now = now)
+        val data = WidgetData(SampleWeather.place, sample.takeIf { state == DataState.READY }, state)
         val renderer = WidgetRenderer(this)
+        if (intent.getBooleanExtra("export", false)) {
+            exportPreviews(renderer, data)
+            finish()
+            return
+        }
         setContent {
             BreezeTheme {
                 Column(
@@ -83,6 +108,26 @@ class WidgetLabActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** Draws each kind at its default size into a transparent bitmap and saves it as PNG. */
+    private fun exportPreviews(renderer: WidgetRenderer, data: WidgetData) {
+        val dir = File(getExternalFilesDir(null), "previews").apply { mkdirs() }
+        val density = resources.displayMetrics.density
+        for (kind in WidgetKind.entries) {
+            val w = (kind.defaultWidthDp * density).roundToInt()
+            val h = (kind.defaultHeightDp * density).roundToInt()
+            val views = renderer.render(0, kind, kind.defaultConfig(), data, kind.defaultWidthDp.toFloat(), kind.defaultHeightDp.toFloat(), WidgetBitmaps(density), interactive = false)
+            val parent = FrameLayout(this)
+            val view = views.apply(this, parent)
+            parent.addView(view, FrameLayout.LayoutParams(w, h))
+            parent.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+            parent.layout(0, 0, w, h)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            parent.draw(Canvas(bitmap))
+            File(dir, "widget_preview_${kind.name.lowercase()}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        Log.i("BreezeWidgets", "Previews written to $dir")
     }
 
     private fun defaultSizes(kind: WidgetKind): List<Pair<Float, Float>> = when (kind) {

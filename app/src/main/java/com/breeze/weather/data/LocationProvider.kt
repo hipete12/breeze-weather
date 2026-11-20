@@ -133,6 +133,19 @@ class LocationProvider(private val context: Context) {
             }
         }
 
+    /**
+     * The newest location any app on the device has obtained, however old, or null. For
+     * background use: Android throttles background location requests to a few per hour, but this
+     * cached location is at least as recent as the last fix this app got itself.
+     */
+    @SuppressLint("MissingPermission")
+    fun newestLastKnown(): Location? {
+        if (access() == LocationAccess.NONE) return null
+        return (manager.allProviders + LocationManager.PASSIVE_PROVIDER).distinct()
+            .mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }
+            .maxByOrNull { it.elapsedRealtimeNanos }
+    }
+
     @SuppressLint("MissingPermission")
     private fun bestLastKnown(): Location? {
         val maxAgeMs = 30 * 60 * 1000L
