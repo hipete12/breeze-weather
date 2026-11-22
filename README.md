@@ -38,11 +38,18 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   Tap or drag across it to read any hour. A dashed line shows the **10-year historical average**
   for that date and hour (from the ERA5 archive), and a plain-language daily summary compares
   the forecast with it.
+- **Radar map.** A card at the bottom of each place shows the latest precipitation radar around
+  it; tap it for a full-screen map you can pan and zoom. Switch between **Radar** (the past two
+  hours, animated with play/pause and a timeline), **Temperature** (colours plus values),
+  **Wind** (speed colours plus arrows) and **Clouds** for the next 12 hours, each with a legend.
+  The map is OpenStreetMap ([OpenFreeMap](https://openfreemap.org/) tiles via MapLibre) and the
+  radar comes from [RainViewer](https://www.rainviewer.com/api.html): no keys or accounts.
 - **Home screen widgets.** Six widgets in a range of sizes, all fully customizable (see below).
 - **°C / °F toggle.** The default follows your locale.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
-- **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/).
+- **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/);
+  the radar map uses RainViewer and OpenFreeMap, which need no keys either.
 - **No Google Play Services dependency.** Location uses the platform `LocationManager`
   (with the fused provider on Android 12+).
 
@@ -182,6 +189,11 @@ Or build and install in one step:
 ./gradlew installDebug
 ```
 
+On an emulator, the full-screen radar map needs the `swangle_indirect` GPU mode: with the
+default software renderer (`swiftshader_indirect`) the emulator itself crashes when a live
+MapLibre map opens. Start it with, for example,
+`emulator -avd <name> -gpu swangle_indirect`. Real devices aren't affected.
+
 ### Testing location on an emulator
 
 ```bash
@@ -205,6 +217,8 @@ app/src/main/java/com/breeze/weather/
 │   ├── Models.kt            # Domain models + Open-Meteo DTOs
 │   ├── Condition.kt         # WMO weather code → condition/description
 │   ├── WeatherRepository.kt # Forecast, geocoding and 10-year history client with disk cache
+│   ├── MapData.kt           # Radar frames (RainViewer), map grids and forecast fields (pure, tested)
+│   ├── MapRepository.kt     # Fetches radar frames and forecast fields for the map
 │   ├── LocationProvider.kt  # Precise current location + reverse geocoding
 │   └── PlacesStore.kt       # Saved places and unit preference (SharedPreferences)
 ├── ui/
@@ -215,6 +229,10 @@ app/src/main/java/com/breeze/weather/
 │   ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
 │   ├── WindCard.kt          # Animated wind streaks, direction arrow, Beaufort scale
 │   ├── SunCard.kt           # Sun-path curve for sunrise/sunset
+│   ├── RadarCard.kt         # Home-screen radar preview (an off-screen map snapshot)
+│   ├── RadarScreen.kt       # Full-screen map: layers, timeline, legend
+│   ├── MapPaint.kt          # Colour scales and forecast overlay images (pure, tested)
+│   ├── MapSupport.kt        # MapLibre setup, lifecycle and shared map layers
 │   ├── Components.kt        # Shared card and colour helpers
 │   ├── LocationsScreen.kt   # Search, saved places, unit toggle
 │   ├── WidgetsScreen.kt     # Widget gallery, placed widgets, refresh interval
@@ -270,8 +288,12 @@ adb shell am start -n com.breeze.weather/.IconGalleryActivity --ez day false  # 
 ## Tech stack
 
 Kotlin 2.4 · Jetpack Compose (Material 3) · AndroidX Lifecycle/ViewModel · kotlinx.serialization ·
-Coroutines/Flow · WorkManager · RemoteViews app widgets · Android Gradle Plugin 9.5.
+Coroutines/Flow · WorkManager · RemoteViews app widgets · MapLibre Android (OpenGL ES) ·
+Android Gradle Plugin 9.5.
 
 ## Credits
 
-Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
+Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). Radar by
+[RainViewer](https://www.rainviewer.com/) (personal use). Map tiles by
+[OpenFreeMap](https://openfreemap.org/), © [OpenMapTiles](https://www.openmaptiles.org/),
+data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.

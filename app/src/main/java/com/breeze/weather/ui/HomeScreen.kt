@@ -83,6 +83,7 @@ import com.breeze.weather.data.Units
 import com.breeze.weather.data.Weather
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -98,6 +99,7 @@ fun HomeScreen(
     onRefresh: (Place) -> Unit,
     onRequestLocation: () -> Unit,
     onOpenDay: (Place, Int) -> Unit,
+    onOpenRadar: (Place) -> Unit,
 ) {
     val pages = state.pages
     val settled = pages.getOrNull(pagerState.currentPage)
@@ -127,6 +129,7 @@ fun HomeScreen(
                     onRefresh = { onRefresh(place) },
                     onRequestPrecise = onRequestLocation,
                     onOpenDay = { day -> onOpenDay(place, day) },
+                    onOpenRadar = { onOpenRadar(place) },
                 )
             }
             // Fade content out under the status bar so scrolled text never collides with it.
@@ -159,6 +162,7 @@ private fun PlacePage(
     onRefresh: () -> Unit,
     onRequestPrecise: () -> Unit,
     onOpenDay: (Int) -> Unit,
+    onOpenRadar: () -> Unit,
 ) {
     val weather = placeWeather?.weather
     val refreshing = (placeWeather?.loading == true && weather != null) || (location?.locating == true && weather != null)
@@ -178,7 +182,7 @@ private fun PlacePage(
             Spacer(Modifier.height(36.dp))
             PlaceHeader(place, location, onRequestPrecise)
             when {
-                weather != null -> WeatherBody(weather, onOpenDay)
+                weather != null -> WeatherBody(place, weather, onOpenDay, onOpenRadar)
                 placeWeather?.error != null -> Message(placeWeather.error, "Try again", onRefresh)
                 location?.error != null && location.place == null -> Message(location.error, "Try again", onRefresh)
                 else -> Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
@@ -225,7 +229,7 @@ private fun PlaceHeader(place: Place, location: com.breeze.weather.ui.LocationSt
 }
 
 @Composable
-private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) {
+private fun ColumnScope.WeatherBody(place: Place, weather: Weather, onOpenDay: (Int) -> Unit, onOpenRadar: () -> Unit) {
     val context = LocalContext.current
     val use24h = remember { DateFormat.is24HourFormat(context) }
     val today = weather.daily.firstOrNull()
@@ -272,6 +276,8 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
 
     Spacer(Modifier.height(12.dp))
     DetailsSection(weather, use24h)
+    Spacer(Modifier.height(12.dp))
+    RadarCard(place, ZoneOffset.ofTotalSeconds(weather.utcOffsetSeconds), use24h, onOpenRadar)
 
     Spacer(Modifier.height(20.dp))
     val updated = Instant.ofEpochMilli(weather.fetchedAt).atZone(ZoneId.systemDefault())

@@ -31,7 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.Place
 
-private enum class Screen { Home, Locations, Day, Widgets }
+private enum class Screen { Home, Locations, Day, Widgets, Radar }
 
 /** A place to open, and optionally a day of its forecast, from a widget tap. */
 data class LaunchRequest(val placeId: String?, val day: Int?)
@@ -52,6 +52,7 @@ fun BreezeApp(
     var targetPageId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailDay by rememberSaveable { mutableIntStateOf(0) }
+    var radarPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState { state.pages.size }
 
     // --- Location permission ---
@@ -162,7 +163,26 @@ fun BreezeApp(
                     detailDay = day
                     screen = Screen.Day
                 },
+                onOpenRadar = { place ->
+                    radarPlaceId = place.id
+                    screen = Screen.Radar
+                },
             )
+
+            Screen.Radar -> {
+                val place = state.pages.firstOrNull { it.id == radarPlaceId }
+                if (place == null) {
+                    LaunchedEffect(Unit) { screen = Screen.Home }
+                } else {
+                    val offset = state.weather[place.id]?.weather?.utcOffsetSeconds
+                    RadarScreen(
+                        place = place,
+                        units = state.units,
+                        zone = offset?.let { java.time.ZoneOffset.ofTotalSeconds(it) } ?: java.time.ZoneId.systemDefault(),
+                        onBack = { screen = Screen.Home },
+                    )
+                }
+            }
 
             Screen.Day -> {
                 val place = state.pages.firstOrNull { it.id == detailPlaceId }

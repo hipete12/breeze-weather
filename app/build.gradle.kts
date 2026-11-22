@@ -59,7 +59,13 @@ android {
     }
 
     buildTypes {
+        // MapLibre's native renderer is ~10 MB per ABI. Phones are ARM; debug builds add x86_64
+        // for the emulator.
+        debug {
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        }
         release {
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -72,6 +78,10 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    // Compress native libraries in the APK (a download from GitHub), about a third of the size.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
     }
 }
 
@@ -91,6 +101,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.maplibre.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.junit)
