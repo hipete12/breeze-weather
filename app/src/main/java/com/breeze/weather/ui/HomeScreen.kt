@@ -254,7 +254,7 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
 
     Spacer(Modifier.height(12.dp))
 
-    GlassCard(title = "10-day forecast", icon = Icons.Rounded.CalendarMonth, bottomPadding = 10.dp) {
+    GlassCard(title = "10-day forecast", icon = Icons.Rounded.CalendarMonth) {
         val minT = weather.daily.minOfOrNull { it.low } ?: 0.0
         val maxT = weather.daily.maxOfOrNull { it.high } ?: 1.0
         weather.daily.forEachIndexed { i, day ->
@@ -300,23 +300,25 @@ private fun DayRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .height(46.dp)
+            .height(52.dp)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = OnSky, modifier = Modifier.width(64.dp))
-        Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(24.dp))
+        // Sized to fill the row's height, with a few dp to spare above and below.
+        val rowText = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp)
+        Text(label, style = rowText, color = OnSky, modifier = Modifier.width(64.dp))
+        Column(Modifier.width(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(32.dp))
             if (day.precipitationChance > 0) {
                 Text(
                     "${day.precipitationChance}%",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 12.sp),
                     color = RainBlue,
                 )
             }
         }
         Text(
-            day.low.deg(), style = MaterialTheme.typography.titleMedium,
+            day.low.deg(), style = rowText,
             color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, modifier = Modifier.width(44.dp),
         )
         TemperatureBar(
@@ -325,8 +327,8 @@ private fun DayRow(
             modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
         )
         Text(
-            day.high.deg(), style = MaterialTheme.typography.titleMedium,
-            color = OnSky, modifier = Modifier.width(36.dp),
+            day.high.deg(), style = rowText,
+            color = OnSky, modifier = Modifier.width(40.dp),
         )
     }
 }
@@ -379,8 +381,8 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                     )
                     Spacer(Modifier.height(6.dp))
                     // "Now" shows the current reading (temperature below too), not the hour's forecast.
-                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(22.dp))
-                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
+                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(28.dp))
+                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(28.dp))
                     if (showPrecip) {
                         Text(
                             if (hour.precipitationChance > 0) "${hour.precipitationChance}%" else "",
