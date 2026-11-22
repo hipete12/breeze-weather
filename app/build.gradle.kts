@@ -53,8 +53,8 @@ android {
         applicationId = "com.breeze.weather"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.3.0-beta.8"
+        versionCode = 14
+        versionName = "0.3.0-beta.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
