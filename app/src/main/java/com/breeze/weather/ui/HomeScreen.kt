@@ -360,10 +360,12 @@ private fun TemperatureBar(
     }
 }
 
+/** Height for an hour's icon (and chance of rain, when there is one) in the 24-hour strip. */
+private val HOUR_SLOT = 36.dp
+
 @Composable
 private fun HourlyStrip(weather: Weather, use24h: Boolean) {
     val hours = weather.hourly
-    val showPrecip = hours.take(6).any { it.precipitationChance > 0 }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Exactly six hours fit the card width on any screen; the rest scroll.
         val itemWidth = maxWidth / 6
@@ -378,19 +380,28 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         maxLines = 1,
                     )
                     Spacer(Modifier.height(6.dp))
-                    // "Now" shows the current reading (temperature below too), not the hour's forecast.
-                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(26.dp))
-                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(26.dp))
-                    if (showPrecip) {
-                        // Tucked under the icon, with room before the temperature.
-                        Text(
-                            if (hour.precipitationChance > 0) "${hour.precipitationChance}%" else "",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
-                            color = RainBlue,
-                            modifier = Modifier.padding(top = 1.dp).height(12.dp),
-                        )
+                    // A fixed slot, so temperatures line up: a large icon, or a smaller one with the
+                    // chance of rain under it.
+                    val rain = hour.precipitationChance > 0
+                    Column(
+                        Modifier.height(HOUR_SLOT),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        val iconSize = if (rain) 24.dp else 30.dp
+                        // "Now" shows the current reading (temperature below too), not the hour's forecast.
+                        if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(iconSize))
+                        else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(iconSize))
+                        if (rain) {
+                            Text(
+                                "${hour.precipitationChance}%",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                                color = RainBlue,
+                                maxLines = 1,
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         if (i == 0) weather.current.temperature.deg() else hour.temperature.deg(),
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 18.sp),
