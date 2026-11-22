@@ -27,8 +27,8 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   - **Chance of rain** is shown whenever it's above 0%, in the app and in widgets.
   - **Feels like:** shows the difference from the actual temperature, colour-coded from blue
     (feels colder) to red (feels warmer).
-  - **Wind:** animated streaks whose number, length and speed scale with the wind, and a dial
-    whose needle points to where the wind comes from, labelled ("NW") at its tip. Also the
+  - **Wind:** animated streaks whose number, length and speed scale with the wind, and an
+    arrow pointing to where the wind comes from, labelled ("NW") at its tip. Also the
     Beaufort scale (force 0–12) with gusts.
   - **Sunrise & sunset:** the sun's path across the day. The curve is solid for time already
     passed and dotted for what's ahead, with the sun at its current position.
@@ -213,7 +213,7 @@ app/src/main/java/com/breeze/weather/
 │   ├── HomeScreen.kt        # Pager of places with forecast cards
 │   ├── DayDetailScreen.kt   # Day picker, metric selector, summary and stats for one day
 │   ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
-│   ├── WindCard.kt          # Animated wind streaks, direction dial, Beaufort scale
+│   ├── WindCard.kt          # Animated wind streaks, direction arrow, Beaufort scale
 │   ├── SunCard.kt           # Sun-path curve for sunrise/sunset
 │   ├── Components.kt        # Shared card and colour helpers
 │   ├── LocationsScreen.kt   # Search, saved places, unit toggle

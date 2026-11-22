@@ -194,8 +194,8 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
 }
 
 /**
- * Where the wind comes from, like a weather vane: a needle across a faint dial points into the
- * wind, with the direction ("NW") at its tip. No compass letters; a brighter tick marks north.
+ * Where the wind comes from, like a weather vane: a needle points into the wind, with the
+ * direction ("NW") at its tip. Just the needle and label, no dial around them.
  */
 @Composable
 private fun WindDial(direction: Int, modifier: Modifier) {
@@ -205,32 +205,14 @@ private fun WindDial(direction: Int, modifier: Modifier) {
     val label = remember(name, labelStyle) { measurer.measure(name, labelStyle) }
     Canvas(modifier.semantics { contentDescription = "Wind from $name" }) {
         val r = size.minDimension / 2 - 1.dp.toPx()
-        drawCircle(Color.White.copy(alpha = 0.16f), radius = r, style = Stroke(1.dp.toPx()))
         // Unit vector toward the wind's source (bearing 0 = north, up).
         val rad = Math.toRadians(direction.toDouble())
         val ux = sin(rad).toFloat()
         val uy = -cos(rad).toFloat()
         fun at(d: Float) = Offset(center.x + ux * d, center.y + uy * d)
 
-        // Ticks every 45°, except under the label; north is longer and brighter.
-        val labelOctant = (((direction % 360) + 360) % 360 + 22) / 45 % 8
-        for (i in 0 until 8) {
-            if (i == labelOctant) continue
-            val a = Math.toRadians(i * 45.0)
-            val len = if (i == 0) 6.dp.toPx() else 3.dp.toPx()
-            val tx = sin(a).toFloat()
-            val ty = -cos(a).toFloat()
-            drawLine(
-                Color.White.copy(alpha = if (i == 0) 0.6f else 0.3f),
-                Offset(center.x + tx * (r - len), center.y + ty * (r - len)),
-                Offset(center.x + tx * r, center.y + ty * r),
-                strokeWidth = 1.5.dp.toPx(),
-                cap = StrokeCap.Round,
-            )
-        }
-
         // The needle: fading tail, solid shaft, arrowhead pointing into the wind.
-        val tail = at(-r * 0.62f)
+        val tail = at(-r * 0.7f)
         val tip = at(r * 0.44f)
         val headLen = 9.dp.toPx()
         val headBase = at(r * 0.44f - headLen)
