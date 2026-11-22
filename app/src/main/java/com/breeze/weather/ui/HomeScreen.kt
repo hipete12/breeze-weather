@@ -301,11 +301,11 @@ private fun DayRow(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .height(52.dp)
-            .padding(horizontal = 4.dp),
+            .padding(start = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val rowText = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
-        Text(label, style = rowText, color = OnSky, modifier = Modifier.width(64.dp))
+        Text(label, style = rowText, color = OnSky, maxLines = 1, modifier = Modifier.width(58.dp))
         // Icon on the row's centre line, with the chance of rain beside it rather than under it.
         WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(28.dp))
         Text(
@@ -313,20 +313,20 @@ private fun DayRow(
             style = MaterialTheme.typography.labelMedium,
             color = RainBlue,
             maxLines = 1,
-            modifier = Modifier.padding(start = 6.dp).width(34.dp),
+            modifier = Modifier.padding(start = 6.dp).width(32.dp),
         )
         Text(
             day.low.deg(), style = rowText,
-            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, modifier = Modifier.width(42.dp),
+            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(36.dp),
         )
         TemperatureBar(
             low = day.low, high = day.high, minT = minT, maxT = maxT,
             current = currentTemp, units = units,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
         Text(
             day.high.deg(), style = rowText,
-            color = OnSky, modifier = Modifier.width(40.dp),
+            color = OnSky, maxLines = 1, modifier = Modifier.width(36.dp),
         )
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
@@ -109,11 +110,16 @@ fun WindCard(speed: Double, gusts: Double?, direction: Int, units: Units, modifi
     }
 }
 
-private class Streak(val y: Float, val length: Float, val offset: Float, val speed: Int, val alpha: Float, val width: Float)
+private class Streak(
+    val y: Float, val length: Float, val offset: Float, val speed: Int, val alpha: Float, val width: Float,
+    /** The air current it rides: a gentle wave (height in dp, waves across the field, start) and a slight slope. */
+    val waveDp: Float, val waves: Float, val wavePhase: Float, val tilt: Float,
+)
 
 /**
- * Lines drifting left to right (the dial beside them gives the direction). More, longer, faster
- * and brighter streaks as the wind picks up; gusty conditions add a gentle pulse.
+ * Lines drifting left to right (the dial beside them gives the direction), each riding its own
+ * gentle current so they rise, dip and cross a little rather than run in rails. More, longer,
+ * faster and brighter streaks as the wind picks up; gusty conditions add a pulse and more sway.
  */
 @Composable
 private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
@@ -130,6 +136,10 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
                 speed = 1 + r.nextInt(2),
                 alpha = 0.35f + r.nextFloat() * 0.5f,
                 width = 1.2f + r.nextFloat() * 1.4f,
+                waveDp = 1.5f + r.nextFloat() * 3f,
+                waves = 0.4f + r.nextFloat() * 0.6f,
+                wavePhase = r.nextFloat() * 6.28f,
+                tilt = (r.nextFloat() - 0.5f) * 0.12f,
             )
         }
     }
@@ -146,17 +156,29 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
             val p = (phase * s.speed + s.offset) % 1f
             val x = -len + p * (size.width + len)
             val pulse = 1f - gustiness * 0.5f * (0.5f + 0.5f * sin((phase * 2 * Math.PI + i).toFloat()))
-            val y = s.y * size.height + gustiness * 3.dp.toPx() * cos((p * 6 + i).toDouble()).toFloat()
+            val baseY = s.y * size.height
+            val amp = (s.waveDp + gustiness * 3f).dp.toPx()
+            // The current is fixed in space (drifting slowly), so a streak curves as it travels along it.
+            fun yAt(px: Float): Float {
+                val t = px / size.width
+                return baseY + s.tilt * (px - size.width / 2) +
+                    amp * sin(t * s.waves * 6.283f + s.wavePhase + phase * 1.5f)
+            }
             val a = s.alpha * pulse * calmFactor
-            drawLine(
+            val path = Path().apply {
+                val steps = 10
+                for (k in 0..steps) {
+                    val px = x + len * k / steps
+                    if (k == 0) moveTo(px, yAt(px)) else lineTo(px, yAt(px))
+                }
+            }
+            drawPath(
+                path,
                 brush = Brush.horizontalGradient(
                     listOf(Color.Transparent, Color.White.copy(alpha = a), Color.Transparent),
                     startX = x, endX = x + len,
                 ),
-                start = Offset(x, y),
-                end = Offset(x + len, y),
-                strokeWidth = s.width.dp.toPx(),
-                cap = StrokeCap.Round,
+                style = Stroke(width = s.width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }
     }
