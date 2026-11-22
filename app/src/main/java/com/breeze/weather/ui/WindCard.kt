@@ -30,8 +30,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -117,6 +120,12 @@ private class Streak(
     val y: Float, val length: Float, val offset: Float, val speed: Int, val alpha: Float, val width: Float,
     /** The air current it rides: a gentle wave (height in dp, waves across the field, start) and a slight slope. */
     val waveDp: Float, val waves: Float, val wavePhase: Float, val tilt: Float,
+    /**
+     * Some gusts only live for part of the crossing: they fade in at [lifeStart] (fraction of the
+     * trip) and out again [lifeSpan] later, so streaks appear and vanish inside the field.
+     * A span of 0 means the streak crosses the whole field.
+     */
+    val lifeStart: Float, val lifeSpan: Float,
 )
 
 /**
@@ -143,6 +152,8 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
                 waves = 0.4f + r.nextFloat() * 0.6f,
                 wavePhase = r.nextFloat() * 6.28f,
                 tilt = (r.nextFloat() - 0.5f) * 0.12f,
+                lifeSpan = if (r.nextFloat() < 0.45f) 0.3f + r.nextFloat() * 0.3f else 0f,
+                lifeStart = 0.15f + r.nextFloat() * 0.25f,
             )
         }
     }
@@ -159,7 +170,8 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
     val gustiness = if (gustKmh != null && kmh > 1) ((gustKmh - kmh) / (kmh + 5)).coerceIn(0.0, 1.0).toFloat() else 0f
     val calmFactor = if (kmh < 1) 0.45f else 1f
 
-    Canvas(modifier.clipToBounds()) {
+    // Drawn offscreen so the edge masks below can fade the streaks out instead of cutting them off.
+    Canvas(modifier.clipToBounds().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         streaks.forEachIndexed { i, s ->
             val len = size.width * s.length * (0.55f + level / 14f)
             val p = (phase * s.speed + s.offset) % 1f
@@ -173,7 +185,14 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
                 return baseY + s.tilt * (px - size.width / 2) +
                     amp * sin(t * s.waves * 2f * PI.toFloat() + s.wavePhase + drift)
             }
-            val a = s.alpha * pulse * calmFactor
+            // Short-lived streaks swell in and die away; p wraps only while the streak is off-field,
+            // so this stays seamless across the loop.
+            val life = if (s.lifeSpan > 0f) {
+                val t = (p - s.lifeStart) / s.lifeSpan
+                if (t <= 0f || t >= 1f) 0f else sin(t * PI.toFloat())
+            } else 1f
+            if (life <= 0f) return@forEachIndexed
+            val a = s.alpha * pulse * calmFactor * life
             val path = Path().apply {
                 val steps = 10
                 for (k in 0..steps) {
@@ -190,6 +209,16 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
                 style = Stroke(width = s.width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }
+        // Soft edges: streaks thin out towards the sides (and a little at the top and bottom),
+        // so the field has no visible box however long and fast they get.
+        drawRect(
+            Brush.horizontalGradient(0f to Color.Transparent, 0.2f to Color.Black, 0.8f to Color.Black, 1f to Color.Transparent),
+            blendMode = BlendMode.DstIn,
+        )
+        drawRect(
+            Brush.verticalGradient(0f to Color.Transparent, 0.12f to Color.Black, 0.88f to Color.Black, 1f to Color.Transparent),
+            blendMode = BlendMode.DstIn,
+        )
     }
 }
 
