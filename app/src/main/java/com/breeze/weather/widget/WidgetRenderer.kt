@@ -713,8 +713,8 @@ class WidgetRenderer(private val context: Context) {
     }
 
     private companion object {
-        /** Chances of rain below this aren't worth a label. */
-        const val RAIN_MIN = 10
+        /** Every chance of rain above 0% gets a label. */
+        const val RAIN_MIN = 1
         /** Narrower than this (dp), a temperature bar says too little to be worth the space. */
         const val MIN_BAR_WIDTH = 40f
         val DARK_BG = Color(0xFF141A2A).toArgb()

@@ -307,7 +307,7 @@ private fun DayRow(
         Text(label, style = MaterialTheme.typography.titleMedium, color = OnSky, modifier = Modifier.width(64.dp))
         Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(24.dp))
-            if (day.precipitationChance >= 20) {
+            if (day.precipitationChance > 0) {
                 Text(
                     "${day.precipitationChance}%",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -363,7 +363,7 @@ private fun TemperatureBar(
 @Composable
 private fun HourlyStrip(weather: Weather, use24h: Boolean) {
     val hours = weather.hourly
-    val showPrecip = hours.take(6).any { it.precipitationChance >= 20 }
+    val showPrecip = hours.take(6).any { it.precipitationChance > 0 }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Exactly six hours fit the card width on any screen; the rest scroll.
         val itemWidth = maxWidth / 6
@@ -383,7 +383,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                     else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
                     if (showPrecip) {
                         Text(
-                            if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",
+                            if (hour.precipitationChance > 0) "${hour.precipitationChance}%" else "",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             color = RainBlue,
                             modifier = Modifier.height(14.dp),

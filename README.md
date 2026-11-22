@@ -21,6 +21,10 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 - **Uncluttered UI.** One big temperature, a compact 24-hour strip (six hours visible at a
   time), a 10-day forecast with temperature-range bars, and a few focused cards. The background
   gradient follows the current conditions and day/night.
+  - **Day icons** show the weather while the sun is up: the most severe condition from the hour
+    of sunrise to the hour after sunset (sunrise 7:45 and sunset 5:03 give 7 AM to 6 PM), so
+    rain overnight doesn't make a dry day look rainy.
+  - **Chance of rain** is shown whenever it's above 0%, in the app and in widgets.
   - **Feels like:** shows the difference from the actual temperature, colour-coded from blue
     (feels colder) to red (feels warmer).
   - **Wind:** animated streaks whose number, length and speed scale with the wind and point the

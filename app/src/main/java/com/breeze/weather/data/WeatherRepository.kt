@@ -218,16 +218,20 @@ class WeatherRepository(context: Context) {
         val daily = d.time.indices.mapNotNull { i ->
             val high = d.temperatureMax.getOrNull(i) ?: return@mapNotNull null
             val low = d.temperatureMin.getOrNull(i) ?: return@mapNotNull null
-            val code = d.weatherCode.getOrNull(i)?.toInt() ?: 3
+            val date = LocalDate.parse(d.time[i])
+            val sunrise = d.sunrise.getOrNull(i)?.let(LocalDateTime::parse)
+            val sunset = d.sunset.getOrNull(i)?.let(LocalDateTime::parse)
+            // The icon follows the daylight hours; the service's whole-day code is the fallback.
+            val code = DayWeather.code(date, sunrise, sunset, hours, fallback = d.weatherCode.getOrNull(i)?.toInt() ?: 3)
             DayForecast(
-                date = LocalDate.parse(d.time[i]),
+                date = date,
                 condition = Condition.fromWmo(code),
                 weatherCode = code,
                 high = high,
                 low = low,
                 precipitationChance = d.precipitationProbabilityMax.getOrNull(i)?.toInt() ?: 0,
-                sunrise = d.sunrise.getOrNull(i)?.let(LocalDateTime::parse),
-                sunset = d.sunset.getOrNull(i)?.let(LocalDateTime::parse),
+                sunrise = sunrise,
+                sunset = sunset,
                 uvMax = d.uvIndexMax.getOrNull(i),
             )
         }
