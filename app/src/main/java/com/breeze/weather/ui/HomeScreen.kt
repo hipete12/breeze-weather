@@ -361,7 +361,7 @@ private fun TemperatureBar(
 }
 
 /** Height for an hour's icon (and chance of rain, when there is one) in the 24-hour strip. */
-private val HOUR_SLOT = 36.dp
+private val HOUR_SLOT = 38.dp
 
 @Composable
 private fun HourlyStrip(weather: Weather, use24h: Boolean) {
@@ -379,7 +379,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         fontWeight = if (i == 0) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     // A fixed slot, so temperatures line up: a large icon, or a smaller one with the
                     // chance of rain under it.
                     val rain = hour.precipitationChance > 0
@@ -388,7 +388,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        val iconSize = if (rain) 24.dp else 30.dp
+                        val iconSize = if (rain) 26.dp else 34.dp
                         // "Now" shows the current reading (temperature below too), not the hour's forecast.
                         if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(iconSize))
                         else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(iconSize))
