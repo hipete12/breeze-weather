@@ -45,6 +45,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.breeze.weather.data.Units
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -110,6 +111,8 @@ fun WindCard(speed: Double, gusts: Double?, direction: Int, units: Units, modifi
     }
 }
 
+private const val DRIFT_MS = 9000
+
 private class Streak(
     val y: Float, val length: Float, val offset: Float, val speed: Int, val alpha: Float, val width: Float,
     /** The air current it rides: a gentle wave (height in dp, waves across the field, start) and a slight slope. */
@@ -144,8 +147,14 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
         }
     }
     val transition = rememberInfiniteTransition(label = "wind")
+    // Every term below repeats exactly when its loop restarts, so the restart can't be seen:
+    // streaks move a whole number of widths per cycle, and angles turn by whole multiples of 2π.
     val phase by transition.animateFloat(
         0f, 1f, infiniteRepeatable(tween(cycleMs, easing = LinearEasing)), label = "phase",
+    )
+    // The currents drift on their own slow loop, one full wave per loop, whatever the wind speed.
+    val drift by transition.animateFloat(
+        0f, 2f * PI.toFloat(), infiniteRepeatable(tween(DRIFT_MS, easing = LinearEasing)), label = "drift",
     )
     val gustiness = if (gustKmh != null && kmh > 1) ((gustKmh - kmh) / (kmh + 5)).coerceIn(0.0, 1.0).toFloat() else 0f
     val calmFactor = if (kmh < 1) 0.45f else 1f
@@ -162,7 +171,7 @@ private fun WindStreaks(kmh: Double, gustKmh: Double?, modifier: Modifier) {
             fun yAt(px: Float): Float {
                 val t = px / size.width
                 return baseY + s.tilt * (px - size.width / 2) +
-                    amp * sin(t * s.waves * 6.283f + s.wavePhase + phase * 1.5f)
+                    amp * sin(t * s.waves * 2f * PI.toFloat() + s.wavePhase + drift)
             }
             val a = s.alpha * pulse * calmFactor
             val path = Path().apply {
