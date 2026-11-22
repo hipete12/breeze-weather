@@ -304,22 +304,20 @@ private fun DayRow(
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Sized to fill the row's height, with a few dp to spare above and below.
-        val rowText = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp)
+        val rowText = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
         Text(label, style = rowText, color = OnSky, modifier = Modifier.width(64.dp))
-        Column(Modifier.width(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(32.dp))
-            if (day.precipitationChance > 0) {
-                Text(
-                    "${day.precipitationChance}%",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 12.sp),
-                    color = RainBlue,
-                )
-            }
-        }
+        // Icon on the row's centre line, with the chance of rain beside it rather than under it.
+        WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(28.dp))
+        Text(
+            if (day.precipitationChance > 0) "${day.precipitationChance}%" else "",
+            style = MaterialTheme.typography.labelMedium,
+            color = RainBlue,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp).width(34.dp),
+        )
         Text(
             day.low.deg(), style = rowText,
-            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, modifier = Modifier.width(44.dp),
+            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, modifier = Modifier.width(42.dp),
         )
         TemperatureBar(
             low = day.low, high = day.high, minT = minT, maxT = maxT,
@@ -381,18 +379,18 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                     )
                     Spacer(Modifier.height(6.dp))
                     // "Now" shows the current reading (temperature below too), not the hour's forecast.
-                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(28.dp))
-                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(28.dp))
+                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(26.dp))
+                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(26.dp))
                     if (showPrecip) {
+                        // Tucked under the icon, with room before the temperature.
                         Text(
                             if (hour.precipitationChance > 0) "${hour.precipitationChance}%" else "",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
                             color = RainBlue,
-                            modifier = Modifier.height(14.dp),
+                            modifier = Modifier.padding(top = 1.dp).height(12.dp),
                         )
-                    } else {
-                        Spacer(Modifier.height(4.dp))
                     }
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         if (i == 0) weather.current.temperature.deg() else hour.temperature.deg(),
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 18.sp),
