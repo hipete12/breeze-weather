@@ -248,13 +248,13 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
     }
     Spacer(Modifier.height(36.dp))
 
-    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule, onClick = { onOpenDay(0) }) {
+    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule, onClick = { onOpenDay(0) }, bottomPadding = 10.dp) {
         HourlyStrip(weather, use24h)
     }
 
     Spacer(Modifier.height(12.dp))
 
-    GlassCard(title = "10-day forecast", icon = Icons.Rounded.CalendarMonth) {
+    GlassCard(title = "10-day forecast", icon = Icons.Rounded.CalendarMonth, bottomPadding = 10.dp) {
         val minT = weather.daily.minOfOrNull { it.low } ?: 0.0
         val maxT = weather.daily.maxOfOrNull { it.high } ?: 1.0
         weather.daily.forEachIndexed { i, day ->
@@ -300,7 +300,7 @@ private fun DayRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .height(52.dp)
+            .height(46.dp)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -310,7 +310,7 @@ private fun DayRow(
             if (day.precipitationChance > 0) {
                 Text(
                     "${day.precipitationChance}%",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
                     color = RainBlue,
                 )
             }
@@ -393,7 +393,7 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                     }
                     Text(
                         if (i == 0) weather.current.temperature.deg() else hour.temperature.deg(),
-                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 18.sp),
                         color = OnSky,
                     )
                 }

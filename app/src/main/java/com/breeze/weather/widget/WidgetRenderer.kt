@@ -557,6 +557,11 @@ class WidgetRenderer(private val context: Context) {
             v.setViewVisibility(R.id.st_hl, View.GONE)
         }
         if (stack) return v
+        if (sp.placeDp > 0f && c.place != null) {
+            v.setViewVisibility(R.id.st_place_row, View.VISIBLE)
+            text(v, R.id.st_place, c.place.name, sp.placeDp, c.style.primary, c.style)
+            pin(v, R.id.st_pin, c, sp.placeDp / c.s)
+        }
         if (sp.cells == 0) {
             v.setViewVisibility(R.id.st_lead, View.VISIBLE)
             return v

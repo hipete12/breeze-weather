@@ -270,6 +270,24 @@ class WidgetPlannerTest {
         assertFalse(strip(WidgetKind.HOURLY_STRIP, 350f, 170f, noRain).strip!!.cellRain)
     }
 
+    @Test fun stripPlaceIsOptionalAndKeepsTheColumns() {
+        // Off by default, and the Mini never shows it.
+        assertEquals(0f, strip(WidgetKind.HOURLY_STRIP, 350f, 80f).strip!!.placeDp, 0f)
+        val mini = WidgetKind.MINI.defaultConfig().copy(stripPlace = true)
+        assertEquals(0f, strip(WidgetKind.MINI, 80f, 90f, mini).strip!!.placeDp, 0f)
+        for (kind in listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP)) {
+            val off = strip(kind, 350f, 80f).strip!!
+            val on = strip(kind, 350f, 80f, kind.defaultConfig().copy(stripPlace = true)).strip!!
+            assertTrue("$on", on.placeDp >= 11f)
+            // The temperature row gives up the height; the columns and high and low stay.
+            assertEquals(off.cells, on.cells)
+            assertTrue(on.highLowDp > 0f)
+            assertTrue(on.iconDp <= off.iconDp)
+        }
+        // Still there in a narrow strip without columns.
+        assertTrue(strip(WidgetKind.HOURLY_STRIP, 170f, 80f, WidgetKind.HOURLY_STRIP.defaultConfig().copy(stripPlace = true)).strip!!.placeDp > 0f)
+    }
+
     @Test fun stripHighAndLowCanBeHidden() {
         val off = WidgetKind.HOURLY_STRIP.defaultConfig().copy(showHighLow = false)
         assertEquals(0f, strip(WidgetKind.HOURLY_STRIP, 350f, 80f, off).strip!!.highLowDp, 0f)
@@ -281,14 +299,14 @@ class WidgetPlannerTest {
         val line = 1.17f
         val measure = TextMeasure.Estimate
         for (kind in listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP, WidgetKind.MINI)) {
-            for (scale in TextScale.entries) for (count in listOf(3, 5, 8)) for (temp in listOf("8°", "-12°", "104°")) {
+            for (scale in TextScale.entries) for (count in listOf(3, 5, 8)) for (temp in listOf("8°", "-12°", "104°")) for (place in listOf(false, true)) {
                 for (w in listOf(60f, 80f, 110f, 170f, 260f, 320f, 350f, 420f)) for (h in listOf(50f, 60f, 70f, 80f, 95f, 120f, 170f, 260f)) {
-                    val config = kind.defaultConfig().copy(textScale = scale, stripCount = count)
+                    val config = kind.defaultConfig().copy(textScale = scale, stripCount = count, stripPlace = place)
                     val p = strip(kind, w, h, config, temp = temp)
                     val sp = p.strip!!
                     val innerW = w - 2 * p.paddingH
                     val innerH = h - 2 * p.paddingV
-                    val label = "$kind $scale $count $temp ${w}x$h: $sp"
+                    val label = "$kind $scale $count $temp place=$place ${w}x$h: $sp"
                     val text = if (kind == WidgetKind.DAILY_STRIP) dayLabels else hourLabels
                     if (sp.layout == StripLayout.STACK) {
                         val height = sp.iconDp + sp.tempDp * line + (if (sp.highLowDp > 0f) sp.highLowDp * line + 2f else 0f)
@@ -301,7 +319,8 @@ class WidgetPlannerTest {
                     val cellW = maxOf(text.cellLabels.maxOf { measure.widthDp(it, sp.cellLabelDp) }, text.cellTemps.maxOf { measure.widthDp(it, sp.cellTempDp) })
                     val cells = if (sp.cells > 0) dims.STRIP_CELLS_GAP + sp.cells * cellW else 0f
                     assertTrue("$label is ${row + cells} wide", row + cells <= innerW + 0.5f || sp.tempDp <= 14f)
-                    assertTrue("$label: row too tall", maxOf(sp.iconDp, sp.tempDp * line, 2 * sp.highLowDp * line + 2f) <= innerH + 0.5f)
+                    val placeH = if (sp.placeDp > 0f) sp.placeDp * line + dims.STRIP_PLACE_GAP else 0f
+                    assertTrue("$label: row too tall", maxOf(sp.iconDp, sp.tempDp * line, 2 * sp.highLowDp * line + 2f) + placeH <= innerH + 0.5f)
                     if (sp.cells > 0) {
                         val column = (sp.cellLabelDp + sp.cellTempDp) * line + sp.cellIconDp + 2 * dims.STRIP_CELL_GAP +
                             if (sp.cellRain) dims.TEXT_TINY * 0.9f * scale.factor * line + dims.STRIP_CELL_GAP else 0f

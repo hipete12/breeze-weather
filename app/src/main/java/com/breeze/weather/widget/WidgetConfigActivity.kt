@@ -649,6 +649,7 @@ private fun StripContent(kind: WidgetKind, config: WidgetConfig, onChange: ((Wid
     )
     if (kind == WidgetKind.MINI) return
     val hours = kind == WidgetKind.HOURLY_STRIP
+    SwitchRow("Place name", config.stripPlace) { on -> onChange { it.copy(stripPlace = on) } }
     SwitchRow("Chance of rain", config.showRainChance) { on -> onChange { it.copy(showRainChance = on) } }
     LabeledRow(if (hours) "Hours to show" else "Days to show", null)
     Segmented(

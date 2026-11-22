@@ -33,6 +33,9 @@ enum class WidgetKind(
      */
     val isStrip: Boolean get() = this == HOURLY_STRIP || this == DAILY_STRIP || this == MINI
 
+    /** The 4×1 strips can show the place name under the temperature (the Mini has no room). */
+    val stripCanShowPlace: Boolean get() = this == HOURLY_STRIP || this == DAILY_STRIP
+
     /** Sections shown by default, before the user changes anything. */
     val defaultSections: Set<WidgetSection>
         get() = when (this) {
@@ -136,6 +139,8 @@ enum class Metric(val label: String, val shortLabel: String = label) {
  * @param metrics readings for the details section, in the order the user picked them.
  * @param colorTemps strips: colour high and low temperatures from cold blue to hot red.
  * @param stripCount strips: the most hours or days to show; fewer when they don't fit.
+ * @param stripPlace hourly and daily strips: the place name under the temperature. Separate from
+ *   [showPlace] (on by default for the other widgets) so strips stay compact unless asked.
  */
 @Serializable
 data class WidgetConfig(
@@ -156,6 +161,7 @@ data class WidgetConfig(
     val tapAction: TapAction = TapAction.OPEN_APP,
     val colorTemps: Boolean = true,
     val stripCount: Int = 5,
+    val stripPlace: Boolean = false,
 ) {
     val followsLocation: Boolean get() = place == null
 

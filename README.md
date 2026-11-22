@@ -27,8 +27,9 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   - **Chance of rain** is shown whenever it's above 0%, in the app and in widgets.
   - **Feels like:** shows the difference from the actual temperature, colour-coded from blue
     (feels colder) to red (feels warmer).
-  - **Wind:** animated streaks whose number, length and speed scale with the wind and point the
-    way it blows. Also a compass and the Beaufort scale (force 0–12) with gusts.
+  - **Wind:** animated streaks whose number, length and speed scale with the wind, and a dial
+    whose needle points to where the wind comes from, labelled ("NW") at its tip. Also the
+    Beaufort scale (force 0–12) with gusts.
   - **Sunrise & sunset:** the sun's path across the day. The curve is solid for time already
     passed and dotted for what's ahead, with the sun at its current position.
 - **Day detail.** Tap any day in the 10-day forecast, or the 24-hour strip, for a full-day
@@ -67,7 +68,8 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 - **Every widget is resizable** and lays itself out for the size it's given: more hours, days or
   readings as it grows, and sections that don't fit are left out. A 4 × 1 hourly widget becomes
   just the hourly strip; a narrow details widget becomes a list.
-- **Strips and Mini** skip the place and condition text. Their high and low (and each day's, in the
+- **Strips and Mini** skip the condition text, and the place unless you turn on "Place name" for a
+  4 × 1 strip (it goes under the temperature). Their high and low (and each day's, in the
   daily strip) are coloured from blue when it's cold to red when it's hot, with deeper shades on
   light backgrounds; you can turn that off. Choose how many hours or days to show (3 to 8; as many
   as fit), and the hourly interval.
@@ -211,7 +213,7 @@ app/src/main/java/com/breeze/weather/
 │   ├── HomeScreen.kt        # Pager of places with forecast cards
 │   ├── DayDetailScreen.kt   # Day picker, metric selector, summary and stats for one day
 │   ├── MetricChart.kt       # Interactive 24h chart with historical-average overlay
-│   ├── WindCard.kt          # Animated wind streaks, compass, Beaufort scale
+│   ├── WindCard.kt          # Animated wind streaks, direction dial, Beaufort scale
 │   ├── SunCard.kt           # Sun-path curve for sunrise/sunset
 │   ├── Components.kt        # Shared card and colour helpers
 │   ├── LocationsScreen.kt   # Search, saved places, unit toggle

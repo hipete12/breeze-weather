@@ -43,6 +43,8 @@ data class StripPlan(
     val cellTempDp: Float = 0f,
     /** Room for a chance-of-rain line under each column. */
     val cellRain: Boolean = false,
+    /** Place name text size, under the temperature; 0 when it's off or doesn't fit. ROW only. */
+    val placeDp: Float = 0f,
 )
 
 /** The text a strip has to fit, so the planner can measure it. */
@@ -144,6 +146,9 @@ object WidgetDimens {
     const val STRIP_ICON = 42f
     const val STRIP_TEMP = 36f
     const val STRIP_HIGH_LOW = 14f
+    /** The place line under a strip's temperature, and its gap above (widget_strip.xml). */
+    const val STRIP_PLACE = 12f
+    const val STRIP_PLACE_GAP = 1f
     /** Gaps in widget_strip.xml: icon to temperature, temperature to high/low, then to the columns. */
     const val STRIP_ICON_GAP = 2f
     const val STRIP_HIGH_LOW_GAP = 6f
@@ -433,9 +438,13 @@ object WidgetPlanner {
         val d = WidgetDimens
         // A taller strip gets bigger type, within limits.
         val k = (innerH / d.STRIP_REF_H).coerceIn(0.6f, 1.45f)
-        val baseIcon = min(d.STRIP_ICON * s * k, innerH)
-        val baseTemp = min(d.STRIP_TEMP * s * k, innerH / line)
-        val baseHighLow = if (config.showHighLow) min(min(d.STRIP_HIGH_LOW * s * k, 17f * s), (innerH - 2f) / (2 * line)) else 0f
+        // The place line (if wanted) takes its height from the temperature row, not the columns.
+        var placeDp = if (config.stripPlace && kind.stripCanShowPlace) d.STRIP_PLACE * s * (innerH / d.STRIP_REF_H).coerceIn(0.9f, 1.2f) else 0f
+        if (innerH - placeDp * line - d.STRIP_PLACE_GAP < 30f * s) placeDp = 0f
+        val rowH = if (placeDp > 0f) innerH - placeDp * line - d.STRIP_PLACE_GAP else innerH
+        val baseIcon = min(d.STRIP_ICON * s * k, rowH)
+        val baseTemp = min(d.STRIP_TEMP * s * k, rowH / line)
+        val baseHighLow = if (config.showHighLow) min(min(d.STRIP_HIGH_LOW * s * k, 17f * s), (rowH - 2f) / (2 * line)) else 0f
 
         fun highLowWidth(size: Float) = max(labelMeasure.widthDp(text.high, size), labelMeasure.widthDp(text.low, size))
         fun rowWidth(f: Float, withHighLow: Boolean): Float {
@@ -486,6 +495,7 @@ object WidgetPlanner {
                 tempDp = baseTemp * f,
                 highLowDp = baseHighLow * f,
                 cells = cells,
+                placeDp = placeDp,
             )
         }
 
@@ -496,7 +506,7 @@ object WidgetPlanner {
             val without = fit(innerW, false)
             if (without > f + 0.15f) { withHighLow = false; f = without }
         }
-        val row = StripPlan(StripLayout.ROW, baseIcon * f, baseTemp * f, if (withHighLow) baseHighLow * f else 0f)
+        val row = StripPlan(StripLayout.ROW, baseIcon * f, baseTemp * f, if (withHighLow) baseHighLow * f else 0f, placeDp = placeDp)
         val stack = stackStrip(config, innerW, innerH, tempText, measure, labelMeasure, text, line)
         // Stacking wins if it's bigger, or keeps the high and low the row had to drop.
         val stackKeepsHighLow = row.highLowDp == 0f && stack != null && stack.highLowDp > 0f && stack.tempDp >= row.tempDp * 0.7f

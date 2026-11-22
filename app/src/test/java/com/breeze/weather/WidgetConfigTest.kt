@@ -75,6 +75,11 @@ class WidgetConfigTest {
         val old = json.decodeFromString<WidgetConfig>("""{"theme":"DARK","hourStep":2}""")
         assertTrue(old.colorTemps)
         assertEquals(5, old.stripCount)
+        // The place line in strips is opt-in, even though other widgets show the place by default.
+        assertFalse(old.stripPlace)
+        assertTrue(old.showPlace)
+        assertTrue(WidgetKind.HOURLY_STRIP.stripCanShowPlace && WidgetKind.DAILY_STRIP.stripCanShowPlace)
+        assertFalse(WidgetKind.MINI.stripCanShowPlace)
     }
 
     @Test fun kindsHaveSensibleDefaults() {

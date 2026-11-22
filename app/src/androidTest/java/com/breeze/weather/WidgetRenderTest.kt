@@ -133,11 +133,11 @@ class WidgetRenderTest {
         w >= minW - 1f && h >= minH - 1f
     }
 
-    private fun runAll(kinds: List<WidgetKind>, data: WidgetData) {
+    private fun runAll(kinds: List<WidgetKind>, data: WidgetData, tweak: (WidgetConfig) -> WidgetConfig = { it }) {
         val failures = mutableListOf<String>()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             for (kind in kinds) for ((theme, opacity) in looks) for (scale in TextScale.entries) for ((w, h) in sizesFor(kind)) {
-                val config = kind.defaultConfig().copy(theme = theme, opacity = opacity, textScale = scale)
+                val config = tweak(kind.defaultConfig().copy(theme = theme, opacity = opacity, textScale = scale))
                 val label = "$kind $theme/$opacity $scale ${w.toInt()}x${h.toInt()}"
                 try {
                     check(label, inflate(kind, config, data, w, h))
@@ -160,6 +160,30 @@ class WidgetRenderTest {
         listOf(WidgetKind.NOW, WidgetKind.CONDITIONS, WidgetKind.DAILY, WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP, WidgetKind.MINI),
         ready(Units.IMPERIAL),
     )
+
+    @Test fun stripsWithThePlaceFit() = runAll(
+        listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP), ready(), tweak = { it.copy(stripPlace = true) },
+    )
+
+    @Test fun fourByOneStripShowsThePlaceUnderTheTemperature() {
+        val data = ready()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            for (kind in listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP)) for ((w, h) in listOf(340f to 72f, 350f to 80f, 380f to 95f)) {
+                val label = "$kind ${w}x$h"
+                val off = inflate(kind, kind.defaultConfig(), data, w, h)
+                val root = inflate(kind, kind.defaultConfig().copy(stripPlace = true), data, w, h)
+                val place = visibleTexts(root, R.id.st_place).single()
+                assertEquals(label, SampleWeather.place.name, place.text.toString())
+                assertEquals("$label: place is cut off", 0, place.layout.getEllipsisCount(0))
+                val temp = visibleBounds(root, root.findViewById(R.id.st_temp))!!
+                val placeBounds = visibleBounds(root, place)!!
+                assertTrue(label, placeBounds.top >= temp.bottom - 1)
+                // Same columns as without the place.
+                val cellId = if (kind == WidgetKind.HOURLY_STRIP) R.id.hour_time else R.id.day_name
+                assertEquals(label, visibleTexts(off, cellId).size, visibleTexts(root, cellId).size)
+            }
+        }
+    }
 
     private fun visibleTexts(root: View, id: Int) =
         descendants(root).filterIsInstance<TextView>().filter { it.id == id && visibleBounds(root, it) != null }.toList()
