@@ -12,4 +12,10 @@
     <string name="widget_details_description">Feels like, humidity, wind, UV and more</string>
     <string name="widget_forecast">Complete forecast</string>
     <string name="widget_forecast_description">Now, hourly and daily in one large widget</string>
+    <string name="widget_hourly_strip">Hourly strip</string>
+    <string name="widget_hourly_strip_description">Temperature, high and low, and the next hours in one row</string>
+    <string name="widget_daily_strip">Daily strip</string>
+    <string name="widget_daily_strip_description">Temperature, high and low, and the next days in one row</string>
+    <string name="widget_mini">Mini</string>
+    <string name="widget_mini_description">Temperature with today\'s high and low, in a single cell</string>
 </resources>

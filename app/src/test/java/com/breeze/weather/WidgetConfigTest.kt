@@ -57,6 +57,24 @@ class WidgetConfigTest {
         assertEquals(listOf(Metric.UV, Metric.WIND), config.metrics)
         assertEquals(setOf(WidgetSection.HEADER), config.sections)
         assertEquals(0, WidgetConfig(opacity = -5).sanitized().opacity)
+        assertEquals(WidgetConfig.MAX_STRIP_COUNT, WidgetConfig(stripCount = 50).sanitized().stripCount)
+        assertEquals(WidgetConfig.MIN_STRIP_COUNT, WidgetConfig(stripCount = 0).sanitized().stripCount)
+    }
+
+    @Test fun stripsAreFixedRowsWithColouredHighAndLow() {
+        for (kind in listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP, WidgetKind.MINI)) {
+            assertTrue(kind.isStrip)
+            assertFalse(kind.hasSections)
+            val config = kind.defaultConfig()
+            assertTrue(config.showHighLow)
+            assertTrue(config.colorTemps)
+            assertEquals(5, config.stripCount)
+        }
+        assertFalse(WidgetKind.HOURLY.isStrip)
+        // Settings saved before strips existed still load.
+        val old = json.decodeFromString<WidgetConfig>("""{"theme":"DARK","hourStep":2}""")
+        assertTrue(old.colorTemps)
+        assertEquals(5, old.stripCount)
     }
 
     @Test fun kindsHaveSensibleDefaults() {

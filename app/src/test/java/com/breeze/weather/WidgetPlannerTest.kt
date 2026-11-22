@@ -3,6 +3,8 @@ package com.breeze.weather
 import com.breeze.weather.widget.DayLayout
 import com.breeze.weather.widget.HeaderStyle
 import com.breeze.weather.widget.Metric
+import com.breeze.weather.widget.StripLayout
+import com.breeze.weather.widget.StripText
 import com.breeze.weather.widget.TextScale
 import com.breeze.weather.widget.TextMeasure
 import com.breeze.weather.widget.WidgetConfig
@@ -198,6 +200,116 @@ class WidgetPlannerTest {
         val large = WidgetKind.FORECAST.defaultConfig().copy(textScale = TextScale.LARGE)
         assertTrue(plan(WidgetKind.FORECAST, 350f, 350f, large).days < plan(WidgetKind.FORECAST, 350f, 350f).days)
         assertTrue(plan(WidgetKind.HOURLY, 350f, 170f, large).hours < plan(WidgetKind.HOURLY, 350f, 170f).hours)
+    }
+
+    // ---------- Strips ----------
+
+    private val hourLabels = StripText(cellLabels = listOf("10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM"), cellTemps = listOf("21°"))
+    private val dayLabels = StripText(cellLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri"), cellTemps = listOf("21° 12°", "9° -2°"))
+
+    private fun strip(kind: WidgetKind, w: Float, h: Float, config: WidgetConfig = kind.defaultConfig(), text: StripText = if (kind == WidgetKind.DAILY_STRIP) dayLabels else hourLabels, temp: String = "21°") =
+        WidgetPlanner.plan(kind, config, w, h, temp, availableHours = 24, availableDays = 9, stripText = text)
+
+    @Test fun hourlyStripShowsFiveHoursAtFourByOne() {
+        for ((w, h) in listOf(350f to 80f, 340f to 72f, 380f to 95f)) {
+            val p = strip(WidgetKind.HOURLY_STRIP, w, h)
+            val sp = p.strip!!
+            assertEquals("${w}x$h", StripLayout.ROW, sp.layout)
+            assertEquals("${w}x$h: $sp", 5, sp.cells)
+            assertTrue(sp.highLowDp > 0f)
+            assertTrue(p.sections.isEmpty())
+        }
+    }
+
+    @Test fun stripCountIsAMaximum() {
+        val three = WidgetKind.HOURLY_STRIP.defaultConfig().copy(stripCount = 3)
+        assertEquals(3, strip(WidgetKind.HOURLY_STRIP, 350f, 80f, three).strip!!.cells)
+        // Eight asked for, but only so many fit in 4×1; a 5×1 fits more.
+        val eight = WidgetKind.HOURLY_STRIP.defaultConfig().copy(stripCount = 8)
+        val fourWide = strip(WidgetKind.HOURLY_STRIP, 350f, 80f, eight).strip!!.cells
+        val fiveWide = strip(WidgetKind.HOURLY_STRIP, 450f, 80f, eight).strip!!.cells
+        assertTrue("$fourWide then $fiveWide", fourWide in 5..7 && fiveWide > fourWide)
+        // And never more than the forecast has.
+        assertEquals(2, WidgetPlanner.plan(WidgetKind.HOURLY_STRIP, eight, 450f, 80f, availableHours = 2, stripText = hourLabels).strip!!.cells)
+    }
+
+    @Test fun dailyStripFitsSeveralDays() {
+        val sp = strip(WidgetKind.DAILY_STRIP, 350f, 80f).strip!!
+        assertTrue("$sp", sp.cells >= 4)
+        assertTrue(sp.cellTempDp < strip(WidgetKind.HOURLY_STRIP, 350f, 80f).strip!!.cellTempDp)
+    }
+
+    @Test fun narrowStripKeepsJustTheTemperature() {
+        val sp = strip(WidgetKind.HOURLY_STRIP, 170f, 80f).strip!!
+        assertEquals(0, sp.cells)
+        assertEquals(StripLayout.ROW, sp.layout)
+        assertTrue(sp.highLowDp > 0f)
+        // Never a lone column.
+        for (w in 150..450 step 10) assertTrue(strip(WidgetKind.HOURLY_STRIP, w.toFloat(), 80f).strip!!.cells != 1)
+    }
+
+    @Test fun miniStacksInOneCellAndLinesUpInTwo() {
+        assertEquals(StripLayout.STACK, strip(WidgetKind.MINI, 80f, 90f).strip!!.layout)
+        assertEquals(StripLayout.STACK, strip(WidgetKind.MINI, 70f, 70f).strip!!.layout)
+        val wide = strip(WidgetKind.MINI, 170f, 80f).strip!!
+        assertEquals(StripLayout.ROW, wide.layout)
+        assertEquals(0, wide.cells)
+        assertEquals(StripLayout.STACK, strip(WidgetKind.MINI, 170f, 170f).strip!!.layout)
+    }
+
+    @Test fun tallerStripsGetBiggerTypeAndRain() {
+        val short = strip(WidgetKind.HOURLY_STRIP, 350f, 80f).strip!!
+        val tall = strip(WidgetKind.HOURLY_STRIP, 350f, 170f).strip!!
+        assertTrue(tall.tempDp >= short.tempDp && tall.iconDp > short.iconDp)
+        assertTrue(tall.cellRain)
+        assertFalse(short.cellRain)
+        // But not at the cost of columns.
+        assertTrue("$short vs $tall", tall.cells >= short.cells)
+        assertTrue(strip(WidgetKind.DAILY_STRIP, 350f, 170f).strip!!.cells >= strip(WidgetKind.DAILY_STRIP, 350f, 80f).strip!!.cells)
+        val noRain = WidgetKind.HOURLY_STRIP.defaultConfig().copy(showRainChance = false)
+        assertFalse(strip(WidgetKind.HOURLY_STRIP, 350f, 170f, noRain).strip!!.cellRain)
+    }
+
+    @Test fun stripHighAndLowCanBeHidden() {
+        val off = WidgetKind.HOURLY_STRIP.defaultConfig().copy(showHighLow = false)
+        assertEquals(0f, strip(WidgetKind.HOURLY_STRIP, 350f, 80f, off).strip!!.highLowDp, 0f)
+        assertEquals(0f, strip(WidgetKind.MINI, 80f, 90f, WidgetKind.MINI.defaultConfig().copy(showHighLow = false)).strip!!.highLowDp, 0f)
+    }
+
+    @Test fun stripsFitTheirSpace() {
+        val dims = com.breeze.weather.widget.WidgetDimens
+        val line = 1.17f
+        val measure = TextMeasure.Estimate
+        for (kind in listOf(WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP, WidgetKind.MINI)) {
+            for (scale in TextScale.entries) for (count in listOf(3, 5, 8)) for (temp in listOf("8°", "-12°", "104°")) {
+                for (w in listOf(60f, 80f, 110f, 170f, 260f, 320f, 350f, 420f)) for (h in listOf(50f, 60f, 70f, 80f, 95f, 120f, 170f, 260f)) {
+                    val config = kind.defaultConfig().copy(textScale = scale, stripCount = count)
+                    val p = strip(kind, w, h, config, temp = temp)
+                    val sp = p.strip!!
+                    val innerW = w - 2 * p.paddingH
+                    val innerH = h - 2 * p.paddingV
+                    val label = "$kind $scale $count $temp ${w}x$h: $sp"
+                    val text = if (kind == WidgetKind.DAILY_STRIP) dayLabels else hourLabels
+                    if (sp.layout == StripLayout.STACK) {
+                        val height = sp.iconDp + sp.tempDp * line + (if (sp.highLowDp > 0f) sp.highLowDp * line + 2f else 0f)
+                        assertTrue("$label is $height tall", height <= innerH + 2f)
+                        assertTrue(label, measure.widthDp(temp, sp.tempDp) <= innerW + 0.5f)
+                        continue
+                    }
+                    val highLow = if (sp.highLowDp > 0f) dims.STRIP_HIGH_LOW_GAP + measure.widthDp("21°", sp.highLowDp) else 0f
+                    val row = sp.iconDp + dims.STRIP_ICON_GAP + measure.widthDp(temp, sp.tempDp) + highLow
+                    val cellW = maxOf(text.cellLabels.maxOf { measure.widthDp(it, sp.cellLabelDp) }, text.cellTemps.maxOf { measure.widthDp(it, sp.cellTempDp) })
+                    val cells = if (sp.cells > 0) dims.STRIP_CELLS_GAP + sp.cells * cellW else 0f
+                    assertTrue("$label is ${row + cells} wide", row + cells <= innerW + 0.5f || sp.tempDp <= 14f)
+                    assertTrue("$label: row too tall", maxOf(sp.iconDp, sp.tempDp * line, 2 * sp.highLowDp * line + 2f) <= innerH + 0.5f)
+                    if (sp.cells > 0) {
+                        val column = (sp.cellLabelDp + sp.cellTempDp) * line + sp.cellIconDp + 2 * dims.STRIP_CELL_GAP +
+                            if (sp.cellRain) dims.TEXT_TINY * 0.9f * scale.factor * line + dims.STRIP_CELL_GAP else 0f
+                        assertTrue("$label: column is $column of $innerH", column <= innerH + 1f || innerH < 40f)
+                    }
+                }
+            }
+        }
     }
 
     @Test fun planContentNeverExceedsTheHeight() {

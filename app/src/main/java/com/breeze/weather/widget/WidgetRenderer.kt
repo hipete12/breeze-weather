@@ -62,16 +62,26 @@ class WidgetRenderer(private val context: Context) {
     private val use24h = DateFormat.is24HourFormat(context)
 
     /**
-     * Measures the temperature with the font the launcher will draw it in (the system's light
-     * sans serif, which follows custom system fonts such as Samsung's), with a little slack.
+     * Measure text with the fonts the launcher will draw it in (the system's sans serif, which
+     * follows custom system fonts such as Samsung's), with a little slack: the light temperature
+     * font, and the medium font of smaller labels (the wider of regular and medium).
      */
-    private val tempMeasure = run {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
-        TextMeasure { text, size ->
-            synchronized(paint) {
-                paint.textSize = size
-                paint.measureText(text) * 1.06f + 2f
+    private val tempMeasure = fontMeasure("sans-serif-light", scale = 1.06f, slack = 2f)
+    private val labelMeasure = fontMeasure("sans-serif-medium", scale = 1.03f, slack = 0.5f)
+
+    private fun fontMeasure(family: String, scale: Float, slack: Float): TextMeasure {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create(family, Typeface.NORMAL) }
+        val lineEm = paint.run {
+            textSize = 100f
+            (fontMetrics.descent - fontMetrics.ascent) / 100f
+        }
+        return object : TextMeasure {
+            override fun widthDp(text: String, sizeDp: Float): Float = synchronized(paint) {
+                paint.textSize = sizeDp
+                paint.measureText(text) * scale + slack
             }
+
+            override val lineHeightEm: Float = lineEm
         }
     }
 
@@ -121,9 +131,11 @@ class WidgetRenderer(private val context: Context) {
         val tempText = weather?.let { WidgetContent.temp(it.current.temperature) } ?: "–"
         val plan = if (weather == null) null else WidgetPlanner.plan(
             kind, config, widthDp, heightDp, tempText,
-            availableHours = WidgetContent.availableHours(weather, config.hourStep),
-            availableDays = weather.daily.size,
+            availableHours = WidgetContent.availableHours(weather, config.hourStep, includeNow = !kind.isStrip),
+            availableDays = if (kind.isStrip) WidgetContent.daysAfterToday(weather) else weather.daily.size,
             measure = tempMeasure,
+            labelMeasure = labelMeasure,
+            stripText = if (kind.isStrip) stripText(kind, config, weather) else StripText(),
         )
         val padH = plan?.paddingH ?: WidgetDimens.PAD_SMALL
         val padV = plan?.paddingV ?: WidgetDimens.PAD_SMALL
@@ -138,7 +150,8 @@ class WidgetRenderer(private val context: Context) {
             return views
         }
 
-        val ctx = Ctx(appWidgetId, config, data.place, weather, plan, style, bitmaps, widthDp - 2 * plan.paddingH, interactive)
+        val ctx = Ctx(appWidgetId, kind, config, data.place, weather, plan, style, bitmaps, widthDp - 2 * plan.paddingH, interactive)
+        if (plan.strip != null) views.addView(R.id.widget_content, strip(ctx, plan.strip))
         val fill = when {
             WidgetSection.DAILY in plan.sections && plan.dayLayout == DayLayout.ROWS -> WidgetSection.DAILY
             WidgetSection.DETAILS in plan.sections -> WidgetSection.DETAILS
@@ -173,6 +186,8 @@ class WidgetRenderer(private val context: Context) {
     /** Resolved colours for one render. [system] means "leave the layout's own colours". */
     private class Style(
         val theme: WidgetTheme,
+        /** Light text on a dark background (as drawn now, for the System theme). */
+        val lightText: Boolean,
         val primary: Int,
         val secondary: Int,
         val rain: Int,
@@ -196,6 +211,7 @@ class WidgetRenderer(private val context: Context) {
                 val neutralTrack = Color(0xFF8C96A8).copy(alpha = 0.32f)
                 return if (lightText) Style(
                     config.theme,
+                    lightText = true,
                     primary = 0xFFFFFFFF.toInt(),
                     secondary = 0xB8FFFFFF.toInt(),
                     rain = 0xFF9AD0FF.toInt(),
@@ -204,6 +220,7 @@ class WidgetRenderer(private val context: Context) {
                     shadow = shadow,
                 ) else Style(
                     config.theme,
+                    lightText = false,
                     primary = 0xFF1A1F2B.toInt(),
                     secondary = 0xFF5B6577.toInt(),
                     rain = 0xFF1F6FD1.toInt(),
@@ -258,6 +275,10 @@ class WidgetRenderer(private val context: Context) {
             R.layout.widget_day_column -> R.layout.widget_day_column_shadow
             R.layout.widget_detail_tile -> R.layout.widget_detail_tile_shadow
             R.layout.widget_message -> R.layout.widget_message_shadow
+            R.layout.widget_strip -> R.layout.widget_strip_shadow
+            R.layout.widget_strip_stack -> R.layout.widget_strip_stack_shadow
+            R.layout.widget_strip_hour -> R.layout.widget_strip_hour_shadow
+            R.layout.widget_strip_day -> R.layout.widget_strip_day_shadow
             else -> base
         }
     }
@@ -267,6 +288,7 @@ class WidgetRenderer(private val context: Context) {
     /** What every section builder needs for one render. */
     private class Ctx(
         val appWidgetId: Int,
+        val kind: WidgetKind,
         val config: WidgetConfig,
         val place: Place?,
         val weather: Weather,
@@ -498,6 +520,106 @@ class WidgetRenderer(private val context: Context) {
             grid.addView(R.id.details_grid, row)
         }
         return grid
+    }
+
+    // ---------- Strips ----------
+
+    /** The text a strip may show, for the planner to measure. */
+    private fun stripText(kind: WidgetKind, config: WidgetConfig, weather: Weather): StripText {
+        val today = WidgetContent.today(weather)
+        val high = today?.let { WidgetContent.temp(it.high) } ?: ""
+        val low = today?.let { WidgetContent.temp(it.low) } ?: ""
+        return when (kind) {
+            WidgetKind.HOURLY_STRIP -> {
+                val cells = WidgetContent.hourCells(weather, config.hourStep, config.stripCount, use24h, includeNow = false)
+                StripText(high, low, cells.map { it.label }, cells.map { WidgetContent.temp(it.temperature) })
+            }
+            WidgetKind.DAILY_STRIP -> {
+                val days = WidgetContent.dayCells(weather, config.stripCount, fromTomorrow = true)
+                StripText(high, low, days.map { it.label }, days.map { "${WidgetContent.temp(it.day.high)} ${WidgetContent.temp(it.day.low)}" })
+            }
+            else -> StripText(high, low, emptyList(), emptyList())
+        }
+    }
+
+    private fun strip(c: Ctx, sp: StripPlan): RemoteViews {
+        val stack = sp.layout == StripLayout.STACK
+        val v = RemoteViews(pkg, layout(c.style, if (stack) R.layout.widget_strip_stack else R.layout.widget_strip))
+        val cur = c.weather.current
+        weatherIcon(v, R.id.st_icon, cur.weatherCode, cur.isDay, sp.iconDp, c, cur.description)
+        text(v, R.id.st_temp, WidgetContent.temp(cur.temperature), sp.tempDp, c.style.primary, c.style)
+        val today = WidgetContent.today(c.weather)
+        if (sp.highLowDp > 0f && today != null) {
+            tempText(v, R.id.st_high, today.high, sp.highLowDp, c.style.primary, c)
+            tempText(v, R.id.st_low, today.low, sp.highLowDp, c.style.secondary, c)
+            v.setContentDescription(R.id.st_hl, "High ${WidgetContent.temp(today.high)}, low ${WidgetContent.temp(today.low)}")
+        } else {
+            v.setViewVisibility(R.id.st_hl, View.GONE)
+        }
+        if (stack) return v
+        if (sp.cells == 0) {
+            v.setViewVisibility(R.id.st_lead, View.VISIBLE)
+            return v
+        }
+        when (c.kind) {
+            WidgetKind.HOURLY_STRIP -> stripHours(c, sp, v)
+            WidgetKind.DAILY_STRIP -> stripDays(c, sp, v)
+            else -> {}
+        }
+        return v
+    }
+
+    private fun stripHours(c: Ctx, sp: StripPlan, strip: RemoteViews) {
+        val cells = WidgetContent.hourCells(c.weather, c.config.hourStep, sp.cells, use24h, includeNow = false)
+        val showRain = sp.cellRain && cells.any { it.rainChance >= RAIN_MIN }
+        for (cell in cells) {
+            val v = RemoteViews(pkg, layout(c.style, R.layout.widget_strip_hour))
+            text(v, R.id.hour_time, cell.label, sp.cellLabelDp, c.style.secondary, c.style)
+            weatherIcon(v, R.id.hour_icon, cell.weatherCode, cell.isDay, sp.cellIconDp, c, null)
+            text(v, R.id.hour_temp, WidgetContent.temp(cell.temperature), sp.cellTempDp, c.style.primary, c.style)
+            if (showRain) {
+                v.setViewVisibility(R.id.hour_rain, if (cell.rainChance >= RAIN_MIN) View.VISIBLE else View.INVISIBLE)
+                text(v, R.id.hour_rain, "${cell.rainChance}%", WidgetDimens.TEXT_TINY * 0.9f * c.s, c.style.rain, c.style)
+            }
+            strip.addView(R.id.st_cells, v)
+        }
+    }
+
+    private fun stripDays(c: Ctx, sp: StripPlan, strip: RemoteViews) {
+        val days = WidgetContent.dayCells(c.weather, sp.cells, fromTomorrow = true)
+        val showRain = sp.cellRain && days.any { it.day.precipitationChance >= RAIN_MIN }
+        for (cell in days) {
+            val d = cell.day
+            val v = RemoteViews(pkg, layout(c.style, R.layout.widget_strip_day))
+            text(v, R.id.day_name, cell.label, sp.cellLabelDp, c.style.secondary, c.style)
+            weatherIcon(v, R.id.day_icon, d.weatherCode, true, sp.cellIconDp, c, null)
+            tempText(v, R.id.day_high, d.high, sp.cellTempDp, c.style.primary, c)
+            tempText(v, R.id.day_low, d.low, sp.cellTempDp * 0.92f, c.style.secondary, c)
+            if (showRain) {
+                v.setViewVisibility(R.id.day_rain, if (d.precipitationChance >= RAIN_MIN) View.VISIBLE else View.INVISIBLE)
+                text(v, R.id.day_rain, "${d.precipitationChance}%", WidgetDimens.TEXT_TINY * 0.9f * c.s, c.style.rain, c.style)
+            }
+            if (c.interactive && c.config.tapAction == TapAction.OPEN_APP) {
+                v.setOnClickPendingIntent(R.id.day_root, openAppIntent(c.appWidgetId, c.place, cell.index))
+            }
+            strip.addView(R.id.st_cells, v)
+        }
+    }
+
+    /**
+     * A temperature coloured cold to hot when the widget's settings ask for it, otherwise in
+     * [plainColor]. The System theme gets both shades on Android 12+, so the launcher can switch
+     * them with dark mode.
+     */
+    private fun tempText(v: RemoteViews, id: Int, t: Double, sizeDp: Float, plainColor: Int, c: Ctx) {
+        text(v, id, WidgetContent.temp(t), sizeDp, plainColor, c.style)
+        if (!c.config.colorTemps) return
+        val units = c.weather.units
+        if (c.style.system && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            v.setColorInt(id, "setTextColor", TempColors.onLight(t, units), TempColors.onDark(t, units))
+        } else {
+            v.setTextColor(id, if (c.style.lightText) TempColors.onDark(t, units) else TempColors.onLight(t, units))
+        }
     }
 
     private fun glyph(metric: Metric): ImageVector = when (metric) {

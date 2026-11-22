@@ -22,7 +22,16 @@ enum class WidgetKind(
     HOURLY("Hourly forecast", "Current conditions and the next hours", 350, 170),
     DAILY("Daily forecast", "Current conditions and the days ahead", 350, 260),
     DETAILS("Weather details", "Feels like, humidity, wind, UV and more", 170, 170),
-    FORECAST("Complete forecast", "Now, hourly and daily in one large widget", 350, 350);
+    FORECAST("Complete forecast", "Now, hourly and daily in one large widget", 350, 350),
+    HOURLY_STRIP("Hourly strip", "Temperature, high and low, and the next hours in one row", 350, 80),
+    DAILY_STRIP("Daily strip", "Temperature, high and low, and the next days in one row", 350, 80),
+    MINI("Mini", "Temperature with today's high and low, in a single cell", 80, 80);
+
+    /**
+     * Strips are one row: the current temperature with today's high and low, then (for the hourly
+     * and daily strips) a few forecast columns. No place or condition text, so they stay compact.
+     */
+    val isStrip: Boolean get() = this == HOURLY_STRIP || this == DAILY_STRIP || this == MINI
 
     /** Sections shown by default, before the user changes anything. */
     val defaultSections: Set<WidgetSection>
@@ -32,19 +41,20 @@ enum class WidgetKind(
             DAILY -> setOf(WidgetSection.HEADER, WidgetSection.DAILY)
             DETAILS -> setOf(WidgetSection.DETAILS)
             FORECAST -> setOf(WidgetSection.HEADER, WidgetSection.HOURLY, WidgetSection.DAILY)
+            HOURLY_STRIP, DAILY_STRIP, MINI -> setOf(WidgetSection.HEADER)
         }
 
     /** The section kept first when the widget is too small for everything the user turned on. */
     val primarySection: WidgetSection
         get() = when (this) {
-            NOW, CONDITIONS -> WidgetSection.HEADER
+            NOW, CONDITIONS, HOURLY_STRIP, DAILY_STRIP, MINI -> WidgetSection.HEADER
             HOURLY, FORECAST -> WidgetSection.HOURLY
             DAILY -> WidgetSection.DAILY
             DETAILS -> WidgetSection.DETAILS
         }
 
-    /** Whether the user can choose sections; "Now" is always just the current conditions. */
-    val hasSections: Boolean get() = this != NOW
+    /** Whether the user can choose sections; "Now" and the strips have a fixed arrangement. */
+    val hasSections: Boolean get() = this != NOW && !isStrip
 
     fun defaultConfig(): WidgetConfig = WidgetConfig(
         sections = defaultSections,
@@ -124,6 +134,8 @@ enum class Metric(val label: String, val shortLabel: String = label) {
  * @param opacity background opacity, 0 (none: text straight on the wallpaper) to 100.
  * @param hourStep hours between columns in the hourly forecast (1, 2 or 3).
  * @param metrics readings for the details section, in the order the user picked them.
+ * @param colorTemps strips: colour high and low temperatures from cold blue to hot red.
+ * @param stripCount strips: the most hours or days to show; fewer when they don't fit.
  */
 @Serializable
 data class WidgetConfig(
@@ -142,6 +154,8 @@ data class WidgetConfig(
     val showRangeBars: Boolean = true,
     val metrics: List<Metric> = Metric.DEFAULT,
     val tapAction: TapAction = TapAction.OPEN_APP,
+    val colorTemps: Boolean = true,
+    val stripCount: Int = 5,
 ) {
     val followsLocation: Boolean get() = place == null
 
@@ -149,7 +163,13 @@ data class WidgetConfig(
     fun sanitized(): WidgetConfig = copy(
         opacity = opacity.coerceIn(0, 100),
         hourStep = hourStep.coerceIn(1, 3),
+        stripCount = stripCount.coerceIn(MIN_STRIP_COUNT, MAX_STRIP_COUNT),
         metrics = metrics.distinct(),
         sections = sections.ifEmpty { setOf(WidgetSection.HEADER) },
     )
+
+    companion object {
+        const val MIN_STRIP_COUNT = 3
+        const val MAX_STRIP_COUNT = 8
+    }
 }

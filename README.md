@@ -56,10 +56,17 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 | **Daily forecast** | 4 × 3 | Current conditions and up to 10 days with temperature bars |
 | **Weather details** | 2 × 2 | Your pick of feels like, humidity, wind, UV, chance of rain, precipitation, sunrise, sunset, cloud cover, high/low |
 | **Complete forecast** | 4 × 4 | Current conditions, hourly and daily together |
+| **Hourly strip** | 4 × 1 | Icon, temperature, today's high over low, then the next hours (5 by default) |
+| **Daily strip** | 4 × 1 | Icon, temperature, today's high over low, then the next days |
+| **Mini** | 1 × 1 | Icon, temperature and today's high and low; side by side at 2 × 1 |
 
 - **Every widget is resizable** and lays itself out for the size it's given: more hours, days or
   readings as it grows, and sections that don't fit are left out. A 4 × 1 hourly widget becomes
   just the hourly strip; a narrow details widget becomes a list.
+- **Strips and Mini** skip the place and condition text. Their high and low (and each day's, in the
+  daily strip) are coloured from blue when it's cold to red when it's hot, with deeper shades on
+  light backgrounds; you can turn that off. Choose how many hours or days to show (3 to 8; as many
+  as fit), and the hourly interval.
 - **Customize everything** in the settings screen, which opens when you place a widget and shows a
   live preview over your wallpaper: place (or follow your location), style (*Sky*, the app's
   condition gradient; *Dynamic*, Material You colours that follow light and dark mode; *Dark*;

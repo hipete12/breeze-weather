@@ -53,17 +53,19 @@ object WidgetContent {
     }
 
     /**
-     * [count] columns: "Now", then every [step] hours from the next whole hour. The forecast is
-     * expected to be rebased to the present (the repository's cached forecasts are).
+     * [count] columns: "Now" (unless [includeNow] is false), then every [step] hours from the next
+     * whole hour. The forecast is expected to be rebased to the present (the repository's cached
+     * forecasts are).
      */
-    fun hourCells(weather: Weather, step: Int, count: Int, use24h: Boolean): List<HourCell> {
+    fun hourCells(weather: Weather, step: Int, count: Int, use24h: Boolean, includeNow: Boolean = true): List<HourCell> {
         if (count <= 0) return emptyList()
         val now = weather.current
         val currentHour = now.time.truncatedTo(ChronoUnit.HOURS)
-        val first = weather.hours.firstOrNull { it.time == currentHour }
-        val cells = mutableListOf(
-            HourCell("Now", now.temperature, now.weatherCode, now.isDay, first?.precipitationChance ?: 0)
-        )
+        val cells = mutableListOf<HourCell>()
+        if (includeNow) {
+            val first = weather.hours.firstOrNull { it.time == currentHour }
+            cells += HourCell("Now", now.temperature, now.weatherCode, now.isDay, first?.precipitationChance ?: 0)
+        }
         val later = weather.hours.filter { it.time.isAfter(currentHour) }
         var i = step.coerceAtLeast(1) - 1
         while (cells.size < count && i < later.size) {
@@ -74,17 +76,32 @@ object WidgetContent {
         return cells
     }
 
-    /** How many hourly columns there's data for at this [step], including "Now". */
-    fun availableHours(weather: Weather, step: Int): Int {
+    /** How many hourly columns there's data for at this [step], including "Now" if [includeNow]. */
+    fun availableHours(weather: Weather, step: Int, includeNow: Boolean = true): Int {
         val currentHour = weather.current.time.truncatedTo(ChronoUnit.HOURS)
         val later = weather.hours.count { it.time.isAfter(currentHour) }
-        return 1 + later / step.coerceAtLeast(1)
+        return (if (includeNow) 1 else 0) + later / step.coerceAtLeast(1)
     }
 
-    fun dayCells(weather: Weather, count: Int, now: LocalDateTime = weather.localNow()): List<DayCell> {
+    /**
+     * The first [count] days from today, or from tomorrow with [fromTomorrow]. [DayCell.index] is
+     * the day's position in the forecast, which the app's day detail uses.
+     */
+    fun dayCells(weather: Weather, count: Int, now: LocalDateTime = weather.localNow(), fromTomorrow: Boolean = false): List<DayCell> {
         val today = now.toLocalDate()
-        return weather.daily.take(count).mapIndexed { i, d -> DayCell(i, formatDay(d.date, today), d) }
+        return weather.daily.withIndex()
+            .filter { !fromTomorrow || it.value.date.isAfter(today) }
+            .take(count)
+            .map { (i, d) -> DayCell(i, formatDay(d.date, today), d) }
     }
+
+    /** How many days after today there's a forecast for. */
+    fun daysAfterToday(weather: Weather, now: LocalDateTime = weather.localNow()): Int =
+        weather.daily.count { it.date.isAfter(now.toLocalDate()) }
+
+    /** Today's forecast (the strips' high and low), if the forecast still has it. */
+    fun today(weather: Weather, now: LocalDateTime = weather.localNow()): DayForecast? =
+        weather.daily.firstOrNull { it.date == now.toLocalDate() } ?: weather.daily.firstOrNull()
 
     /** Lowest low and highest high across [days], for scaling the temperature bars. */
     fun range(days: List<DayCell>): Pair<Double, Double>? {

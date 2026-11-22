@@ -50,6 +50,30 @@ class WidgetContentTest {
         assertEquals(listOf(0, 1, 2), days.map { it.index })
     }
 
+    @Test fun stripHoursStartAfterNow() {
+        val cells = WidgetContent.hourCells(weather, step = 1, count = 5, use24h = true, includeNow = false)
+        assertEquals(listOf("15:00", "16:00", "17:00", "18:00", "19:00"), cells.map { it.label })
+        assertEquals(listOf("16:00", "18:00"), WidgetContent.hourCells(weather, 2, 2, true, includeNow = false).map { it.label })
+        assertEquals(WidgetContent.availableHours(weather, 3) - 1, WidgetContent.availableHours(weather, 3, includeNow = false))
+    }
+
+    @Test fun stripDaysStartTomorrow() {
+        val days = WidgetContent.dayCells(weather, 4, now, fromTomorrow = true)
+        assertEquals(LocalDate.of(2026, 11, 21), days[0].day.date)
+        // Indexes still point into the whole forecast, for the app's day detail.
+        assertEquals(listOf(1, 2, 3, 4), days.map { it.index })
+        assertEquals(weather.daily.size - 1, WidgetContent.daysAfterToday(weather, now))
+        assertEquals(LocalDate.of(2026, 11, 20), WidgetContent.today(weather, now)!!.date)
+    }
+
+    @Test fun stripDaysSkipPastDaysInAnOldForecast() {
+        // A forecast downloaded two days ago: "tomorrow" is two entries in.
+        val later = now.plusDays(2)
+        val days = WidgetContent.dayCells(weather, 2, later, fromTomorrow = true)
+        assertEquals(listOf(LocalDate.of(2026, 11, 23), LocalDate.of(2026, 11, 24)), days.map { it.day.date })
+        assertEquals(LocalDate.of(2026, 11, 22), WidgetContent.today(weather, later)!!.date)
+    }
+
     @Test fun rangeCoversLowestLowAndHighestHigh() {
         val days = WidgetContent.dayCells(weather, 5, now)
         val (lo, hi) = WidgetContent.range(days)!!

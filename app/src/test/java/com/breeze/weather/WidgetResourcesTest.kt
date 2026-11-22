@@ -65,10 +65,21 @@ class WidgetResourcesTest {
         }
     }
 
+    @Test fun layoutsOnlyUseViewsWidgetsAllow() {
+        // RemoteViews refuses to inflate anything else (even a plain View) on Android 8+.
+        val allowed = setOf("FrameLayout", "LinearLayout", "RelativeLayout", "GridLayout", "TextView", "ImageView", "ProgressBar", "ViewFlipper", "ListView", "GridView", "StackView", "AdapterViewFlipper", "AnalogClock", "Chronometer", "Button", "ImageButton", "TextClock", "ViewStub", "merge")
+        File(res, "layout").listFiles { f -> f.name.startsWith("widget_") }!!.forEach { file ->
+            Regex("""<([A-Za-z][\w.]*)[\s>/]""").findAll(file.readText()).map { it.groupValues[1] }.filter { it != "?xml" }.forEach { tag ->
+                assertTrue("${file.name} uses <$tag>, which widgets can't show", tag in allowed)
+            }
+        }
+    }
+
     @Test fun widgetInfoMatchesEachKind() {
         val names = mapOf(
             WidgetKind.NOW to "now", WidgetKind.CONDITIONS to "conditions", WidgetKind.HOURLY to "hourly",
             WidgetKind.DAILY to "daily", WidgetKind.DETAILS to "details", WidgetKind.FORECAST to "forecast",
+            WidgetKind.HOURLY_STRIP to "hourly_strip", WidgetKind.DAILY_STRIP to "daily_strip", WidgetKind.MINI to "mini",
         )
         assertEquals(WidgetKind.entries.toSet(), names.keys)
         for ((kind, name) in names) {
@@ -89,7 +100,7 @@ class WidgetResourcesTest {
 
     @Test fun manifestDeclaresEveryProvider() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
-        listOf("Now", "Conditions", "Hourly", "Daily", "Details", "Forecast").forEach {
+        listOf("Now", "Conditions", "Hourly", "Daily", "Details", "Forecast", "HourlyStrip", "DailyStrip", "Mini").forEach {
             assertTrue("$it provider", ".widget.${it}WidgetProvider" in manifest)
         }
         assertTrue("android.appwidget.action.APPWIDGET_CONFIGURE" in manifest)

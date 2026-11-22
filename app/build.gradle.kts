@@ -53,8 +53,8 @@ android {
         applicationId = "com.breeze.weather"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.3.0-beta.1"
+        versionCode = 7
+        versionName = "0.3.0-beta.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -97,4 +97,10 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
+}
+
+// WidgetResourcesTest reads res/ and the manifest directly, so changes there must rerun tests.
+tasks.withType<Test>().configureEach {
+    inputs.dir("src/main/res").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file("src/main/AndroidManifest.xml").withPathSensitivity(PathSensitivity.RELATIVE)
 }

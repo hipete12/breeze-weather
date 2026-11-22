@@ -594,6 +594,10 @@ private fun ThemeSwatch(theme: WidgetTheme, selected: Boolean, onClick: () -> Un
 @Composable
 private fun ContentSection(kind: WidgetKind, config: WidgetConfig, onChange: ((WidgetConfig) -> WidgetConfig) -> Unit) {
     SectionTitle("Show")
+    if (kind.isStrip) {
+        StripContent(kind, config, onChange)
+        return
+    }
     if (kind.hasSections) {
         WidgetSection.entries.forEach { section ->
             SwitchRow(section.label, checked = section in config.sections) { on ->
@@ -628,6 +632,38 @@ private fun ContentSection(kind: WidgetKind, config: WidgetConfig, onChange: ((W
     }
     if (WidgetSection.HOURLY in config.sections) {
         LabeledRow("Hourly forecast every", null)
+        Segmented(listOf(1, 2, 3), config.hourStep, { if (it == 1) "1 hour" else "$it hours" }) { step -> onChange { it.copy(hourStep = step) } }
+    }
+}
+
+/** Strips are a fixed row, so their options are only about the numbers in it. */
+@Composable
+private fun StripContent(kind: WidgetKind, config: WidgetConfig, onChange: ((WidgetConfig) -> WidgetConfig) -> Unit) {
+    SwitchRow("High and low", config.showHighLow) { on -> onChange { it.copy(showHighLow = on) } }
+    SwitchRow("Colour by temperature", config.colorTemps) { on -> onChange { it.copy(colorTemps = on) } }
+    Text(
+        "High and low" + (if (kind == WidgetKind.DAILY_STRIP) ", for today and each day," else "") + " go from blue when it's cold to red when it's hot.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    if (kind == WidgetKind.MINI) return
+    val hours = kind == WidgetKind.HOURLY_STRIP
+    SwitchRow("Chance of rain", config.showRainChance) { on -> onChange { it.copy(showRainChance = on) } }
+    LabeledRow(if (hours) "Hours to show" else "Days to show", null)
+    Segmented(
+        (WidgetConfig.MIN_STRIP_COUNT..WidgetConfig.MAX_STRIP_COUNT).toList(),
+        config.stripCount,
+        { "$it" },
+    ) { count -> onChange { it.copy(stripCount = count) } }
+    Text(
+        "As many as fit, up to this number. Chance of rain shows when the widget is tall enough.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    if (hours) {
+        LabeledRow("One every", null)
         Segmented(listOf(1, 2, 3), config.hourStep, { if (it == 1) "1 hour" else "$it hours" }) { step -> onChange { it.copy(hourStep = step) } }
     }
 }

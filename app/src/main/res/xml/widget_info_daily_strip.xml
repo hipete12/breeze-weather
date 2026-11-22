@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- minWidth/minHeight follow the classic (70 × cells − 30)dp rule for launchers before
+     Android 12; targetCell* is used from Android 12 on. updatePeriodMillis is a backstop: the
+     WorkManager job does the regular refreshes. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.breeze.weather.widget.WidgetConfigActivity"
+    android:description="@string/widget_daily_strip_description"
+    android:initialKeyguardLayout="@layout/widget_initial"
+    android:initialLayout="@layout/widget_initial"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
+    android:previewImage="@drawable/widget_preview_daily_strip"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="3600000"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

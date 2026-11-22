@@ -137,5 +137,7 @@ class WidgetLabActivity : ComponentActivity() {
         WidgetKind.DAILY -> listOf(350f to 90f, 350f to 170f, 350f to 260f, 260f to 260f, 350f to 350f)
         WidgetKind.DETAILS -> listOf(170f to 80f, 170f to 170f, 350f to 80f, 350f to 170f, 260f to 260f)
         WidgetKind.FORECAST -> listOf(350f to 260f, 350f to 350f, 380f to 460f)
+        WidgetKind.HOURLY_STRIP, WidgetKind.DAILY_STRIP -> listOf(350f to 80f, 380f to 95f, 320f to 64f, 260f to 80f, 170f to 80f, 350f to 170f)
+        WidgetKind.MINI -> listOf(80f to 90f, 70f to 70f, 170f to 80f, 170f to 170f)
     }
 }

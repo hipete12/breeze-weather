@@ -112,6 +112,42 @@
         </receiver>
 
         <receiver
+            android:name=".widget.HourlyStripWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_hourly_strip">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_hourly_strip" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DailyStripWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_daily_strip">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_daily_strip" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MiniWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_mini">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_mini" />
+        </receiver>
+
+        <receiver
             android:name=".widget.WidgetPinReceiver"
             android:exported="false" />
 

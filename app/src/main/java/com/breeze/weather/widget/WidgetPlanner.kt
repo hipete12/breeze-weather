@@ -20,6 +20,41 @@ enum class HeaderStyle {
 
 enum class DayLayout { ROWS, COLUMNS }
 
+/** How a strip widget arranges the current temperature. */
+enum class StripLayout {
+    /** Icon, temperature, then high over low, side by side; forecast columns follow. */
+    ROW,
+
+    /** Icon over temperature over high and low, for small, square widgets. */
+    STACK,
+}
+
+/** A strip widget's sizes, in dp (see [WidgetKind.isStrip]). */
+data class StripPlan(
+    val layout: StripLayout,
+    val iconDp: Float,
+    val tempDp: Float,
+    /** High and low text size; 0 when they're turned off or don't fit. */
+    val highLowDp: Float,
+    /** Forecast columns (hours or days) after the current conditions; ROW only. */
+    val cells: Int = 0,
+    val cellLabelDp: Float = 0f,
+    val cellIconDp: Float = 0f,
+    val cellTempDp: Float = 0f,
+    /** Room for a chance-of-rain line under each column. */
+    val cellRain: Boolean = false,
+)
+
+/** The text a strip has to fit, so the planner can measure it. */
+data class StripText(
+    val high: String = "21°",
+    val low: String = "12°",
+    /** Every candidate column's label ("3 PM", "Mon"). */
+    val cellLabels: List<String> = listOf("10 AM"),
+    /** Every candidate column's temperature line ("21°", or "21° 12°" for a day). */
+    val cellTemps: List<String> = listOf("21°"),
+)
+
 /**
  * What a widget shows at one size: the result of fitting the user's choices into the space.
  * Sizes are in dp; text sizes in dp too (widget text doesn't follow the system font scale, the
@@ -52,6 +87,8 @@ data class WidgetPlan(
     val detailList: Boolean = false,
     /** Sections that fit, in display order. */
     val sections: List<WidgetSection> = emptyList(),
+    /** Set for strip widgets, which are laid out as one row instead of sections. */
+    val strip: StripPlan? = null,
 ) {
     val detailCount: Int get() = detailColumns * detailRows
 }
@@ -101,11 +138,32 @@ object WidgetDimens {
 
     const val MAX_HOURS = 12
     const val MAX_DAY_COLUMNS = 7
+
+    // Strips, at a typical one-row height (STRIP_REF_H inside the padding).
+    const val STRIP_REF_H = 64f
+    const val STRIP_ICON = 42f
+    const val STRIP_TEMP = 36f
+    const val STRIP_HIGH_LOW = 14f
+    /** Gaps in widget_strip.xml: icon to temperature, temperature to high/low, then to the columns. */
+    const val STRIP_ICON_GAP = 2f
+    const val STRIP_HIGH_LOW_GAP = 6f
+    const val STRIP_CELLS_GAP = 10f
+    /** Between a column's label, icon, temperature and rain line (widget_strip_*.xml). */
+    const val STRIP_CELL_GAP = 2f
+    /** Least space beside a column's widest text, so neighbours don't touch. */
+    const val STRIP_CELL_PAD = 3f
+    const val STRIP_CELL_LABEL = 11f
+    const val STRIP_CELL_ICON = 24f
+    const val STRIP_HOUR_TEMP = 14f
+    const val STRIP_DAY_TEMP = 13f
 }
 
 /** Measures text in dp for a given text size in dp. */
 fun interface TextMeasure {
     fun widthDp(text: String, sizeDp: Float): Float
+
+    /** Height of one line of text (without font padding) per dp of text size. */
+    val lineHeightEm: Float get() = 1.17f
 
     companion object {
         /** A rough guess from character widths, for tests; on a device, measure with the real font. */
@@ -118,7 +176,10 @@ object WidgetPlanner {
 
     /**
      * @param tempText the main temperature as shown (e.g. "-12°"), to size it so it fits.
-     * @param availableHours / availableDays how many forecast columns or rows there's data for.
+     * @param availableHours / availableDays how many forecast columns or rows there's data for
+     *   (for strips: hours after now, days after today).
+     * @param measure measures the light temperature font; [labelMeasure] the regular and medium
+     *   fonts of the smaller text (strips only).
      */
     fun plan(
         kind: WidgetKind,
@@ -129,6 +190,8 @@ object WidgetPlanner {
         availableHours: Int = 24,
         availableDays: Int = 10,
         measure: TextMeasure = TextMeasure.Estimate,
+        labelMeasure: TextMeasure = TextMeasure.Estimate,
+        stripText: StripText = StripText(),
     ): WidgetPlan {
         val s = config.textScale.factor
         val padH = if (widthDp < 120f) WidgetDimens.PAD_SMALL else WidgetDimens.PAD_H
@@ -144,6 +207,14 @@ object WidgetPlanner {
         // Width of the temperature per dp of text size; text width scales linearly with size.
         val em = measure.widthDp(tempText, 100f) / 100f
         if (kind == WidgetKind.NOW) return planNow(base, config, innerW, innerH, em)
+        if (kind.isStrip) {
+            val available = when (kind) {
+                WidgetKind.HOURLY_STRIP -> availableHours
+                WidgetKind.DAILY_STRIP -> availableDays
+                else -> 0
+            }
+            return base.copy(strip = planStrip(kind, config, innerW, innerH, tempText, available, measure, labelMeasure, stripText))
+        }
 
         // Sections the user wants, with the kind's primary section first, then in display order.
         val wanted = WidgetSection.entries.filter { it in config.sections }
@@ -337,6 +408,147 @@ object WidgetPlanner {
             tinyPlace = withPlace,
             sections = listOf(WidgetSection.HEADER),
         )
+    }
+
+    // ---------- Strips ----------
+
+    /**
+     * A strip: the current temperature (with today's high and low) sized from the height, then as
+     * many forecast columns as fit beside it, up to the user's count. A strip too narrow for even
+     * the temperature row stacks it instead (the 1×1 "Mini").
+     */
+    private fun planStrip(
+        kind: WidgetKind,
+        config: WidgetConfig,
+        innerW: Float,
+        innerH: Float,
+        tempText: String,
+        available: Int,
+        measure: TextMeasure,
+        labelMeasure: TextMeasure,
+        text: StripText,
+    ): StripPlan {
+        val s = config.textScale.factor
+        val line = max(measure.lineHeightEm, labelMeasure.lineHeightEm)
+        val d = WidgetDimens
+        // A taller strip gets bigger type, within limits.
+        val k = (innerH / d.STRIP_REF_H).coerceIn(0.6f, 1.45f)
+        val baseIcon = min(d.STRIP_ICON * s * k, innerH)
+        val baseTemp = min(d.STRIP_TEMP * s * k, innerH / line)
+        val baseHighLow = if (config.showHighLow) min(min(d.STRIP_HIGH_LOW * s * k, 17f * s), (innerH - 2f) / (2 * line)) else 0f
+
+        fun highLowWidth(size: Float) = max(labelMeasure.widthDp(text.high, size), labelMeasure.widthDp(text.low, size))
+        fun rowWidth(f: Float, withHighLow: Boolean): Float {
+            val hl = if (withHighLow && baseHighLow > 0f) d.STRIP_HIGH_LOW_GAP + highLowWidth(baseHighLow * f) else 0f
+            return baseIcon * f + d.STRIP_ICON_GAP + measure.widthDp(tempText, baseTemp * f) + hl
+        }
+        // The largest scale (at most 1) at which the row fits [width].
+        fun fit(width: Float, withHighLow: Boolean): Float {
+            var f = 1f
+            while (f > 0.3f && rowWidth(f, withHighLow) > width) f -= 0.02f
+            return f
+        }
+
+        // Forecast columns, sized from the height.
+        val cellsWanted = if (kind == WidgetKind.MINI) 0 else min(config.stripCount, available)
+        // Columns at sizes that grow with the height; if that costs a column, at one-row sizes.
+        fun columns(grow: Boolean): Triple<StripPlan, Int, Float> {
+            val cell = stripCell(kind, config, innerH, line, grow)
+            val cellW = max(
+                text.cellLabels.maxOfOrNull { labelMeasure.widthDp(it, cell.cellLabelDp) } ?: 0f,
+                text.cellTemps.maxOfOrNull { labelMeasure.widthDp(it, cell.cellTempDp) } ?: 0f,
+            ) + d.STRIP_CELL_PAD
+            fun cellsBeside(rowW: Float) = floor((innerW - rowW - d.STRIP_CELLS_GAP) / cellW).toInt().coerceIn(0, cellsWanted)
+            var f = fit(innerW, withHighLow = true)
+            var cells = if (cellsWanted >= 2) cellsBeside(rowWidth(f, true)) else 0
+            // Shrink the temperature a little rather than drop a column the user asked for (in
+            // a taller strip, as far back as its one-row size).
+            var shrink = f
+            val smallest = min(f * 0.84f, f / max(1f, k))
+            while (cells < cellsWanted && shrink > smallest) {
+                shrink -= 0.02f
+                val more = cellsBeside(rowWidth(shrink, true))
+                if (more > cells) { cells = more; f = shrink }
+            }
+            return Triple(cell, cells, f)
+        }
+        var (cell, cells, f) = columns(grow = true)
+        if (cells < cellsWanted && innerH > d.STRIP_REF_H) {
+            val flat = columns(grow = false)
+            if (flat.second > cells) { cell = flat.first; cells = flat.second; f = flat.third }
+        }
+        if (cells < 2) cells = 0
+
+        if (cells > 0) {
+            return cell.copy(
+                layout = StripLayout.ROW,
+                iconDp = baseIcon * f,
+                tempDp = baseTemp * f,
+                highLowDp = baseHighLow * f,
+                cells = cells,
+            )
+        }
+
+        // No columns: the row alone, or (if the widget is narrow) without high and low, or stacked.
+        var withHighLow = baseHighLow > 0f
+        f = fit(innerW, withHighLow)
+        if (withHighLow && f < 0.7f) {
+            val without = fit(innerW, false)
+            if (without > f + 0.15f) { withHighLow = false; f = without }
+        }
+        val row = StripPlan(StripLayout.ROW, baseIcon * f, baseTemp * f, if (withHighLow) baseHighLow * f else 0f)
+        val stack = stackStrip(config, innerW, innerH, tempText, measure, labelMeasure, text, line)
+        // Stacking wins if it's bigger, or keeps the high and low the row had to drop.
+        val stackKeepsHighLow = row.highLowDp == 0f && stack != null && stack.highLowDp > 0f && stack.tempDp >= row.tempDp * 0.7f
+        return if (stack != null && (stack.tempDp > row.tempDp || stackKeepsHighLow)) stack else row
+    }
+
+    /** Label, icon and temperature sizes for a strip's columns at this height. */
+    private fun stripCell(kind: WidgetKind, config: WidgetConfig, innerH: Float, line: Float, grow: Boolean = true): StripPlan {
+        val s = config.textScale.factor
+        val d = WidgetDimens
+        val g = (innerH / d.STRIP_REF_H).coerceIn(0.9f, if (grow) 1.15f else 1f)
+        var label = d.STRIP_CELL_LABEL * s * g
+        var temp = (if (kind == WidgetKind.DAILY_STRIP) d.STRIP_DAY_TEMP else d.STRIP_HOUR_TEMP) * s * g
+        val gaps = 2 * d.STRIP_CELL_GAP
+        // Short strips: smaller type before the icon gets too small to read.
+        val minIcon = 16f
+        val textH = (label + temp) * line
+        if (innerH - textH - gaps < minIcon) {
+            val t = ((innerH - gaps - minIcon) / textH).coerceIn(0.75f, 1f)
+            label *= t
+            temp *= t
+        }
+        val text = (label + temp) * line + gaps
+        val maxIcon = d.STRIP_CELL_ICON * s * (innerH / d.STRIP_REF_H).coerceIn(1f, if (grow) 1.3f else 1f)
+        var icon = (innerH - text).coerceIn(12f, maxIcon)
+        val rainH = d.TEXT_TINY * 0.9f * s * line + d.STRIP_CELL_GAP
+        val rain = config.showRainChance && innerH - text - rainH >= 20f * s
+        if (rain) icon = min(icon, innerH - text - rainH)
+        return StripPlan(StripLayout.ROW, 0f, 0f, 0f, 0, label, icon, temp, rain)
+    }
+
+    /** Icon over temperature over high and low; null if even that doesn't fit. */
+    private fun stackStrip(
+        config: WidgetConfig,
+        innerW: Float,
+        innerH: Float,
+        tempText: String,
+        measure: TextMeasure,
+        labelMeasure: TextMeasure,
+        text: StripText,
+        line: Float,
+    ): StripPlan? {
+        val s = config.textScale.factor
+        val em = measure.widthDp(tempText, 100f) / 100f
+        val temp = minOf(innerW * 0.92f / em, innerH * 0.34f, 48f * s)
+        val pair = "${text.high} ${text.low}"
+        var highLow = if (config.showHighLow) min(12f * s * (innerH / 70f).coerceIn(1f, 1.2f), innerH * 0.16f) else 0f
+        while (highLow > 0f && labelMeasure.widthDp(pair, highLow) > innerW) highLow = if (highLow > 9.5f) highLow - 0.5f else 0f
+        val highLowH = if (highLow > 0f) highLow * line + 2f else 0f
+        val icon = minOf(innerH - temp * line - highLowH - 2f, innerW * 0.85f, 64f * s)
+        if (icon < 14f) return null
+        return StripPlan(StripLayout.STACK, icon, temp, highLow)
     }
 
     /** Approximate width of [text] in ems for the light temperature font. */

@@ -77,6 +77,9 @@ class HourlyWidgetProvider : BreezeWidgetProvider(WidgetKind.HOURLY)
 class DailyWidgetProvider : BreezeWidgetProvider(WidgetKind.DAILY)
 class DetailsWidgetProvider : BreezeWidgetProvider(WidgetKind.DETAILS)
 class ForecastWidgetProvider : BreezeWidgetProvider(WidgetKind.FORECAST)
+class HourlyStripWidgetProvider : BreezeWidgetProvider(WidgetKind.HOURLY_STRIP)
+class DailyStripWidgetProvider : BreezeWidgetProvider(WidgetKind.DAILY_STRIP)
+class MiniWidgetProvider : BreezeWidgetProvider(WidgetKind.MINI)
 
 object WidgetProviders {
     fun providerClass(kind: WidgetKind): Class<out BreezeWidgetProvider> = when (kind) {
@@ -86,6 +89,9 @@ object WidgetProviders {
         WidgetKind.DAILY -> DailyWidgetProvider::class.java
         WidgetKind.DETAILS -> DetailsWidgetProvider::class.java
         WidgetKind.FORECAST -> ForecastWidgetProvider::class.java
+        WidgetKind.HOURLY_STRIP -> HourlyStripWidgetProvider::class.java
+        WidgetKind.DAILY_STRIP -> DailyStripWidgetProvider::class.java
+        WidgetKind.MINI -> MiniWidgetProvider::class.java
     }
 
     fun kindOf(className: String?): WidgetKind? = WidgetKind.entries.firstOrNull { providerClass(it).name == className }
