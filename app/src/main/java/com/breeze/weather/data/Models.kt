@@ -72,9 +72,14 @@ data class Weather(
     val units: Units,
     val fetchedAt: Long,
     val utcOffsetSeconds: Int,
-    /** Nearest weather station whose observations cover today's past hours, if any. */
+    /** Nearest weather station whose observations cover past hours, if any. */
     val observationStation: String? = null,
+    /** Past days leading up to today (oldest first), for historical browsing in day detail. */
+    val pastDaily: List<DayForecast> = emptyList(),
 ) {
+    /** All days in chronological order: historical days followed by today and the forecast. */
+    val allDays: List<DayForecast> get() = pastDaily + daily
+
     /** Wall-clock time right now at this place. */
     fun localNow(): LocalDateTime =
         LocalDateTime.now(java.time.ZoneOffset.ofTotalSeconds(utcOffsetSeconds))
@@ -92,7 +97,9 @@ data class Weather(
         val hour = now.truncatedTo(ChronoUnit.HOURS)
         if (!current.time.truncatedTo(ChronoUnit.HOURS).isBefore(hour)) return this
         val h = hours.firstOrNull { it.time == hour } ?: return null
-        val days = daily.filterNot { it.date.isBefore(now.toLocalDate()) }
+        val today = now.toLocalDate()
+        val past = (pastDaily + daily).filter { it.date.isBefore(today) }
+        val days = daily.filterNot { it.date.isBefore(today) }
         if (days.isEmpty()) return null
         val rebasedCurrent = CurrentConditions(
             time = hour,
@@ -111,6 +118,7 @@ data class Weather(
         return copy(
             current = rebasedCurrent,
             hourly = hours.filterNot { it.time.isBefore(hour) }.take(25),
+            pastDaily = past,
             daily = days,
         )
     }

@@ -33,11 +33,12 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   - **Sunrise & sunset:** the sun's path across the day. The curve is solid for time already
     passed and dotted for what's ahead, with the sun at its current position.
 - **Day detail.** Tap any day in the 10-day forecast, or the 24-hour strip, for a full-day
-  view, then switch days with the picker at the top. A 24-hour chart can show **temperature,
+  view, then switch days with the picker at the top (scroll left from Today to view the past 7
+  historical days). A 24-hour chart can show **temperature,
   feels like, rain chance, precipitation, humidity, wind (with gusts), UV index or cloud cover**.
   Tap or drag across it to read any hour. A dashed line shows the **10-year historical average**
   for that date and hour (from the ERA5 archive), and a plain-language daily summary compares
-  the forecast with it.
+  the forecast or observed weather with it.
 - **Radar map.** A card at the bottom of each place shows the latest precipitation radar around
   it; tap it for a full-screen map you can pan and zoom. Switch between **Radar** (the past two
   hours, animated with play/pause and a timeline), **Temperature** (colours plus values),
@@ -49,7 +50,7 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
 - **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/);
-  today's observed past hours come from [Aviation Weather Center](https://aviationweather.gov/)
+  observed past hours and recent historical days come from [Aviation Weather Center](https://aviationweather.gov/)
   METAR stations; the radar map uses RainViewer and OpenFreeMap, which need no keys either.
 - **No Google Play Services dependency.** Location uses the platform `LocationManager`
   (with the fused provider on Android 12+).
@@ -218,7 +219,7 @@ app/src/main/java/com/breeze/weather/
 │   ├── Models.kt            # Domain models + Open-Meteo DTOs
 │   ├── Condition.kt         # WMO weather code → condition/description
 │   ├── WeatherRepository.kt # Forecast, geocoding and 10-year history client with disk cache
-│   ├── Observations.kt      # Nearby METAR station lookup, parsing and merging for today's past hours (pure, tested)
+│   ├── Observations.kt      # Nearby METAR station lookup, parsing and merging for past hours and days (pure, tested)
 │   ├── MapData.kt           # Radar frames (RainViewer), map grids and forecast fields (pure, tested)
 │   ├── MapRepository.kt     # Fetches radar frames and forecast fields for the map
 │   ├── LocationProvider.kt  # Precise current location + reverse geocoding

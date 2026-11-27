@@ -33,8 +33,8 @@ class WeatherRepository(context: Context) {
         if (!file.exists()) return@withContext null
         runCatching {
             val parsed = parseForecast(file.readText(), units, file.lastModified())
-            applyCachedObservations(place, parsed)
-        }.getOrNull()?.let { it.rebasedTo(it.localNow()) }
+            parsed.rebasedTo(parsed.localNow())?.let { applyCachedObservations(place, it) }
+        }.getOrNull()
     }
 
     suspend fun forecast(place: Place, units: Units): Weather = withContext(Dispatchers.IO) {
@@ -52,7 +52,8 @@ class WeatherRepository(context: Context) {
             append("&temperature_unit=").append(units.tempParam)
             append("&wind_speed_unit=").append(units.windParam)
             append("&precipitation_unit=").append(units.precipParam)
-            append("&timezone=auto&forecast_days=10")
+            append("&timezone=auto&past_days=").append(Observations.PAST_DAYS)
+            append("&forecast_days=10")
         }
         val (body, observed) = coroutineScope {
             val forecastDeferred = async { httpGet(url) }
@@ -237,8 +238,8 @@ class WeatherRepository(context: Context) {
     }
 
     private companion object {
-        const val OBS_CONNECT_TIMEOUT_MS = 3_500
-        const val OBS_READ_TIMEOUT_MS = 4_500
+        const val OBS_CONNECT_TIMEOUT_MS = 4_000
+        const val OBS_READ_TIMEOUT_MS = 7_000
         const val STATION_FOUND_TTL_MS = 7L * 24 * 60 * 60 * 1000
         const val STATION_MISSING_TTL_MS = 24L * 60 * 60 * 1000
     }
@@ -286,8 +287,9 @@ class WeatherRepository(context: Context) {
         }
         val hourly = hours.filterNot { it.time.isBefore(startHour) }.take(25)
 
+        val today = currentTime.toLocalDate()
         val d = dto.daily
-        val daily = d.time.indices.mapNotNull { i ->
+        val allDays = d.time.indices.mapNotNull { i ->
             val high = d.temperatureMax.getOrNull(i) ?: return@mapNotNull null
             val low = d.temperatureMin.getOrNull(i) ?: return@mapNotNull null
             val date = LocalDate.parse(d.time[i])
@@ -307,7 +309,9 @@ class WeatherRepository(context: Context) {
                 uvMax = d.uvIndexMax.getOrNull(i),
             )
         }
+        val pastDaily = allDays.filter { it.date.isBefore(today) }
+        val daily = allDays.filterNot { it.date.isBefore(today) }
 
-        return Weather(current, hourly, hours, daily, units, fetchedAt, dto.utcOffsetSeconds)
+        return Weather(current, hourly, hours, daily, units, fetchedAt, dto.utcOffsetSeconds, pastDaily = pastDaily)
     }
 }

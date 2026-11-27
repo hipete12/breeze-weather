@@ -320,7 +320,7 @@ fun MetricChart(
 
             // Now marker.
             if (nowX != null && nowHour in 0f..23.99f && !metric.isBars) {
-                val i0 = floor(nowHour!!).toInt().coerceIn(0, n - 1)
+                val i0 = floor(nowHour).toInt().coerceIn(0, n - 1)
                 val i1 = (i0 + 1).coerceAtMost(n - 1)
                 val v0 = values[i0]
                 val v1 = values[i1]
