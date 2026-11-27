@@ -45,7 +45,7 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
   **Wind** (speed colours plus arrows) and **Clouds** for the next 12 hours, each with a legend.
   The map is OpenStreetMap ([OpenFreeMap](https://openfreemap.org/) tiles via MapLibre) and the
   radar comes from [RainViewer](https://www.rainviewer.com/api.html): no keys or accounts.
-- **Home screen widgets.** Six widgets in a range of sizes, all fully customizable (see below).
+- **Home screen widgets.** Nine widgets in a range of sizes, all fully customizable (see below).
 - **°C / °F toggle.** The default follows your locale.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
