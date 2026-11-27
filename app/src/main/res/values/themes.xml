@@ -4,4 +4,10 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- Widget settings draw over the home screen wallpaper, so the preview looks like the real thing. -->
+    <style name="Theme.Breeze.WidgetConfig" parent="Theme.Breeze">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

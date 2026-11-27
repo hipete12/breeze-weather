@@ -66,6 +66,9 @@ class RebaseTest {
         // Today is now the third day, not the day the forecast was fetched.
         assertEquals(start.plusDays(2), r.daily.first().date)
         assertEquals(1, r.daily.size)
+        // Past days move into pastDaily in chronological order so day detail can still show them.
+        assertEquals(listOf(start, start.plusDays(1)), r.pastDaily.map { it.date })
+        assertEquals(listOf(start, start.plusDays(1), start.plusDays(2)), r.allDays.map { it.date })
         assertEquals(LocalDateTime.of(start.plusDays(2), java.time.LocalTime.of(2, 0)), r.hourly.first().time)
         // Current conditions come from the 02:00 forecast hour (index 50), not the stale fetch.
         assertEquals(50.0, r.current.temperature, 0.0)

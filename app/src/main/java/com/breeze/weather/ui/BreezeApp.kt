@@ -31,10 +31,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.breeze.weather.data.LocationAccess
 import com.breeze.weather.data.Place
 
-private enum class Screen { Home, Locations, Day }
+private enum class Screen { Home, Locations, Day, Widgets, Radar }
+
+/** A place to open, and optionally a day of its forecast, from a widget tap. */
+data class LaunchRequest(val placeId: String?, val day: Int?)
 
 @Composable
-fun BreezeApp(vm: WeatherViewModel = viewModel()) {
+fun BreezeApp(
+    vm: WeatherViewModel = viewModel(),
+    launchRequest: LaunchRequest? = null,
+    onLaunchRequestHandled: () -> Unit = {},
+) {
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     val search by vm.search.collectAsStateWithLifecycle()
@@ -45,6 +52,7 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
     var targetPageId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailDay by rememberSaveable { mutableIntStateOf(0) }
+    var radarPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState { state.pages.size }
 
     // --- Location permission ---
@@ -100,9 +108,35 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
         }
     }
 
+    // Open what a widget was tapped on: its place, or one day's detail. Waits briefly for the
+    // place's page and forecast to load, then gives up and just shows the home screen.
+    LaunchedEffect(launchRequest) {
+        val request = launchRequest ?: return@LaunchedEffect
+        val deadline = SystemClock.elapsedRealtime() + 4_000
+        var place: Place? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val current = vm.state.value
+            place = current.pages.firstOrNull { it.id == request.placeId }
+            if (place != null && (request.day == null || current.weather[place.id]?.weather != null)) break
+            kotlinx.coroutines.delay(100)
+        }
+        vm.onQueryChange("")
+        val ready = place != null && (request.day == null || vm.state.value.weather[place.id]?.weather != null)
+        if (place != null && request.day != null && ready) {
+            targetPageId = place.id
+            detailPlaceId = place.id
+            detailDay = request.day
+            screen = Screen.Day
+        } else {
+            targetPageId = place?.id
+            screen = Screen.Home
+        }
+        onLaunchRequestHandled()
+    }
+
     BackHandler(enabled = screen != Screen.Home) {
         vm.onQueryChange("")
-        screen = Screen.Home
+        screen = if (screen == Screen.Widgets) Screen.Locations else Screen.Home
     }
 
     AnimatedContent(
@@ -129,7 +163,26 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
                     detailDay = day
                     screen = Screen.Day
                 },
+                onOpenRadar = { place ->
+                    radarPlaceId = place.id
+                    screen = Screen.Radar
+                },
             )
+
+            Screen.Radar -> {
+                val place = state.pages.firstOrNull { it.id == radarPlaceId }
+                if (place == null) {
+                    LaunchedEffect(Unit) { screen = Screen.Home }
+                } else {
+                    val offset = state.weather[place.id]?.weather?.utcOffsetSeconds
+                    RadarScreen(
+                        place = place,
+                        units = state.units,
+                        zone = offset?.let { java.time.ZoneOffset.ofTotalSeconds(it) } ?: java.time.ZoneId.systemDefault(),
+                        onBack = { screen = Screen.Home },
+                    )
+                }
+            }
 
             Screen.Day -> {
                 val place = state.pages.firstOrNull { it.id == detailPlaceId }
@@ -163,6 +216,12 @@ fun BreezeApp(vm: WeatherViewModel = viewModel()) {
                 onRestore = vm::restorePlace,
                 onUnits = vm::setUnits,
                 onRequestLocation = requestLocation,
+                onOpenWidgets = { vm.onQueryChange(""); screen = Screen.Widgets },
+            )
+
+            Screen.Widgets -> WidgetsScreen(
+                state = state,
+                onBack = { screen = Screen.Locations },
             )
         }
     }

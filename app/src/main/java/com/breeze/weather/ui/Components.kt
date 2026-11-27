@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.breeze.weather.data.Units
 import java.time.Duration
@@ -38,6 +39,8 @@ internal fun GlassCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /** Space under the content; less for content with its own breathing room. */
+    bottomPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -46,7 +49,7 @@ internal fun GlassCard(
             .clip(CardShape)
             .background(Color.White.copy(alpha = 0.12f))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(16.dp)
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = bottomPadding)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = OnSky.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))

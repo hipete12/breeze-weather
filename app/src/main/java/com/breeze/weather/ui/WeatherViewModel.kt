@@ -12,6 +12,8 @@ import com.breeze.weather.data.PlacesStore
 import com.breeze.weather.data.Units
 import com.breeze.weather.data.Weather
 import com.breeze.weather.data.WeatherRepository
+import com.breeze.weather.data.distanceKm
+import com.breeze.weather.widget.WidgetUpdater
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,7 +190,7 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
         val existing = weather.value[place.id]
         val units = store.units.value
         val fresh = existing?.weather?.let {
-            it.units == units && System.currentTimeMillis() - it.fetchedAt < STALE_AFTER_MS
+            it.units == units && it.pastDaily.isNotEmpty() && System.currentTimeMillis() - it.fetchedAt < STALE_AFTER_MS
         } ?: false
         if (fresh && !force) return
         if (jobs[place.id]?.isActive == true) return
@@ -199,6 +201,8 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val result = repo.forecast(place, units)
                 setWeather(place.id) { PlaceWeather(weather = result) }
+                // Widgets draw from the same cache; show them the new forecast too.
+                WidgetUpdater.redrawAllSoon(getApplication())
             } catch (e: Exception) {
                 val message = if (e is IOException) "Can't reach the weather service" else "Something went wrong"
                 setWeather(place.id) { it.copy(loading = false, error = message) }
@@ -231,6 +235,8 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
         if (units == store.units.value) return
         store.setUnits(units)
         _history.value = emptyMap()
+        // Widgets can show places the app doesn't, so let them fetch in the new units themselves.
+        WidgetUpdater.requestRefresh(getApplication(), force = false)
         viewModelScope.launch {
             state.value.pages.forEach { place ->
                 val cached = repo.cached(place, units)
@@ -243,11 +249,15 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- History ----------
 
     fun loadHistory(place: Place) {
+        val weather = state.value.weather[place.id]?.weather ?: return
+        val start = (weather.pastDaily.firstOrNull() ?: weather.daily.firstOrNull())?.date ?: return
+        val end = weather.daily.lastOrNull()?.date ?: return
         val existing = _history.value[place.id]
-        if (existing != null && (existing.loading || existing.data != null)) return
-        val days = state.value.weather[place.id]?.weather?.daily ?: return
-        val start = days.firstOrNull()?.date ?: return
-        val end = days.last().date
+        if (existing != null) {
+            if (existing.loading) return
+            val data = existing.data
+            if (data != null && data.keys.any { it.toLocalDate() == start }) return
+        }
         val units = store.units.value
         _history.update { it + (place.id to HistoryState(loading = true)) }
         viewModelScope.launch {
@@ -287,15 +297,7 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun distanceKm(place: Place, lat: Double, lon: Double): Double {
-        val r = 6371.0
-        val dLat = Math.toRadians(lat - place.latitude)
-        val dLon = Math.toRadians(lon - place.longitude)
-        val a = Math.sin(dLat / 2).let { it * it } +
-            Math.cos(Math.toRadians(place.latitude)) * Math.cos(Math.toRadians(lat)) *
-            Math.sin(dLon / 2).let { it * it }
-        return 2 * r * Math.asin(Math.sqrt(a))
-    }
+    private fun distanceKm(place: Place, lat: Double, lon: Double): Double = place.distanceKm(lat, lon)
 
     private companion object {
         const val STALE_AFTER_MS = 15 * 60 * 1000L

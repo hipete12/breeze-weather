@@ -83,6 +83,7 @@ import com.breeze.weather.data.Units
 import com.breeze.weather.data.Weather
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -98,6 +99,7 @@ fun HomeScreen(
     onRefresh: (Place) -> Unit,
     onRequestLocation: () -> Unit,
     onOpenDay: (Place, Int) -> Unit,
+    onOpenRadar: (Place) -> Unit,
 ) {
     val pages = state.pages
     val settled = pages.getOrNull(pagerState.currentPage)
@@ -127,6 +129,7 @@ fun HomeScreen(
                     onRefresh = { onRefresh(place) },
                     onRequestPrecise = onRequestLocation,
                     onOpenDay = { day -> onOpenDay(place, day) },
+                    onOpenRadar = { onOpenRadar(place) },
                 )
             }
             // Fade content out under the status bar so scrolled text never collides with it.
@@ -159,6 +162,7 @@ private fun PlacePage(
     onRefresh: () -> Unit,
     onRequestPrecise: () -> Unit,
     onOpenDay: (Int) -> Unit,
+    onOpenRadar: () -> Unit,
 ) {
     val weather = placeWeather?.weather
     val refreshing = (placeWeather?.loading == true && weather != null) || (location?.locating == true && weather != null)
@@ -178,7 +182,7 @@ private fun PlacePage(
             Spacer(Modifier.height(36.dp))
             PlaceHeader(place, location, onRequestPrecise)
             when {
-                weather != null -> WeatherBody(weather, onOpenDay)
+                weather != null -> WeatherBody(place, weather, onOpenDay, onOpenRadar)
                 placeWeather?.error != null -> Message(placeWeather.error, "Try again", onRefresh)
                 location?.error != null && location.place == null -> Message(location.error, "Try again", onRefresh)
                 else -> Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
@@ -225,7 +229,7 @@ private fun PlaceHeader(place: Place, location: com.breeze.weather.ui.LocationSt
 }
 
 @Composable
-private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) {
+private fun ColumnScope.WeatherBody(place: Place, weather: Weather, onOpenDay: (Int) -> Unit, onOpenRadar: () -> Unit) {
     val context = LocalContext.current
     val use24h = remember { DateFormat.is24HourFormat(context) }
     val today = weather.daily.firstOrNull()
@@ -248,7 +252,7 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
     }
     Spacer(Modifier.height(36.dp))
 
-    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule, onClick = { onOpenDay(0) }) {
+    GlassCard(title = "Next 24 hours", icon = Icons.Rounded.Schedule, onClick = { onOpenDay(0) }, bottomPadding = 10.dp) {
         HourlyStrip(weather, use24h)
     }
 
@@ -272,6 +276,8 @@ private fun ColumnScope.WeatherBody(weather: Weather, onOpenDay: (Int) -> Unit) 
 
     Spacer(Modifier.height(12.dp))
     DetailsSection(weather, use24h)
+    Spacer(Modifier.height(12.dp))
+    RadarCard(place, ZoneOffset.ofTotalSeconds(weather.utcOffsetSeconds), use24h, onOpenRadar)
 
     Spacer(Modifier.height(20.dp))
     val updated = Instant.ofEpochMilli(weather.fetchedAt).atZone(ZoneId.systemDefault())
@@ -301,32 +307,32 @@ private fun DayRow(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .height(52.dp)
-            .padding(horizontal = 4.dp),
+            .padding(start = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = OnSky, modifier = Modifier.width(64.dp))
-        Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(24.dp))
-            if (day.precipitationChance >= 20) {
-                Text(
-                    "${day.precipitationChance}%",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = RainBlue,
-                )
-            }
-        }
+        val rowText = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
+        Text(label, style = rowText, color = OnSky, maxLines = 1, modifier = Modifier.width(58.dp))
+        // Icon on the row's centre line, with the chance of rain beside it rather than under it.
+        WeatherIcon(day.weatherCode, isDay = true, modifier = Modifier.size(28.dp))
         Text(
-            day.low.deg(), style = MaterialTheme.typography.titleMedium,
-            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, modifier = Modifier.width(44.dp),
+            if (day.precipitationChance > 0) "${day.precipitationChance}%" else "",
+            style = MaterialTheme.typography.labelMedium,
+            color = RainBlue,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp).width(32.dp),
+        )
+        Text(
+            day.low.deg(), style = rowText,
+            color = OnSky.copy(alpha = 0.65f), textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(36.dp),
         )
         TemperatureBar(
             low = day.low, high = day.high, minT = minT, maxT = maxT,
             current = currentTemp, units = units,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
         Text(
-            day.high.deg(), style = MaterialTheme.typography.titleMedium,
-            color = OnSky, modifier = Modifier.width(36.dp),
+            day.high.deg(), style = rowText,
+            color = OnSky, maxLines = 1, modifier = Modifier.width(36.dp),
         )
     }
 }
@@ -360,10 +366,12 @@ private fun TemperatureBar(
     }
 }
 
+/** Height for an hour's icon (and chance of rain, when there is one) in the 24-hour strip. */
+private val HOUR_SLOT = 38.dp
+
 @Composable
 private fun HourlyStrip(weather: Weather, use24h: Boolean) {
     val hours = weather.hourly
-    val showPrecip = hours.take(6).any { it.precipitationChance >= 20 }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Exactly six hours fit the card width on any screen; the rest scroll.
         val itemWidth = maxWidth / 6
@@ -377,23 +385,32 @@ private fun HourlyStrip(weather: Weather, use24h: Boolean) {
                         fontWeight = if (i == 0) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                     )
-                    Spacer(Modifier.height(6.dp))
-                    // "Now" shows the current reading (temperature below too), not the hour's forecast.
-                    if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(22.dp))
-                    else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(22.dp))
-                    if (showPrecip) {
-                        Text(
-                            if (hour.precipitationChance >= 20) "${hour.precipitationChance}%" else "",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = RainBlue,
-                            modifier = Modifier.height(14.dp),
-                        )
-                    } else {
-                        Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(4.dp))
+                    // A fixed slot, so temperatures line up: a large icon, or a smaller one with the
+                    // chance of rain under it.
+                    val rain = hour.precipitationChance > 0
+                    Column(
+                        Modifier.height(HOUR_SLOT),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        val iconSize = if (rain) 26.dp else 34.dp
+                        // "Now" shows the current reading (temperature below too), not the hour's forecast.
+                        if (i == 0) WeatherIcon(weather.current.weatherCode, weather.current.isDay, Modifier.size(iconSize))
+                        else WeatherIcon(hour.weatherCode, hour.isDay, Modifier.size(iconSize))
+                        if (rain) {
+                            Text(
+                                "${hour.precipitationChance}%",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                                color = RainBlue,
+                                maxLines = 1,
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         if (i == 0) weather.current.temperature.deg() else hour.temperature.deg(),
-                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 18.sp),
                         color = OnSky,
                     )
                 }

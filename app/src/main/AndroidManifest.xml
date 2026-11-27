@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Optional: lets widgets showing "My location" follow you while the app is closed. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
@@ -23,5 +25,140 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Widget settings: opened by the launcher when a widget is placed or reconfigured. -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:taskAffinity="com.breeze.weather.widgetconfig"
+            android:theme="@style/Theme.Breeze.WidgetConfig"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".widget.NowWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_now">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_now" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.ConditionsWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_conditions">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_conditions" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.HourlyWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_hourly">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_hourly" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DailyWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_daily">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_daily" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DetailsWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_details">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_details" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.ForecastWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_forecast">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_forecast" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.HourlyStripWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_hourly_strip">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_hourly_strip" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DailyStripWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_daily_strip">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_daily_strip" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MiniWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_mini">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_mini" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WidgetPinReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".widget.WidgetSystemReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

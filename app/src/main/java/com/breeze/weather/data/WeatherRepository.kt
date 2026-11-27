@@ -9,8 +9,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -33,8 +31,10 @@ class WeatherRepository(context: Context) {
     suspend fun cached(place: Place, units: Units): Weather? = withContext(Dispatchers.IO) {
         val file = cacheFile(place, units)
         if (!file.exists()) return@withContext null
-        runCatching { parseForecast(file.readText(), units, file.lastModified()) }.getOrNull()
-            ?.let { it.rebasedTo(it.localNow()) }
+        runCatching {
+            val parsed = parseForecast(file.readText(), units, file.lastModified())
+            parsed.rebasedTo(parsed.localNow())?.let { applyCachedObservations(place, it) }
+        }.getOrNull()
     }
 
     suspend fun forecast(place: Place, units: Units): Weather = withContext(Dispatchers.IO) {
@@ -52,13 +52,22 @@ class WeatherRepository(context: Context) {
             append("&temperature_unit=").append(units.tempParam)
             append("&wind_speed_unit=").append(units.windParam)
             append("&precipitation_unit=").append(units.precipParam)
-            append("&timezone=auto&forecast_days=10")
+            append("&timezone=auto&past_days=").append(Observations.PAST_DAYS)
+            append("&forecast_days=10")
         }
-        val body = httpGet(url)
+        val (body, observed) = coroutineScope {
+            val forecastDeferred = async { httpGet(url) }
+            val obsDeferred = async { runCatching { fetchObservations(place) }.getOrNull() }
+            forecastDeferred.await() to obsDeferred.await()
+        }
         val now = System.currentTimeMillis()
         val weather = parseForecast(body, units, now)
         runCatching { cacheFile(place, units).writeText(body) }
-        weather
+        if (observed != null) {
+            Observations.merge(weather, observed.first, observed.second)
+        } else {
+            applyCachedObservations(place, weather)
+        }
     }
 
     suspend fun search(query: String): List<Place> = withContext(Dispatchers.IO) {
@@ -151,24 +160,88 @@ class WeatherRepository(context: Context) {
 
     fun clearCache(place: Place) {
         Units.entries.forEach { cacheFile(place, it).delete() }
+        obsFile(place).delete()
+        stationFile(place).delete()
     }
 
     private fun cacheFile(place: Place, units: Units): File {
         return File(cacheDir, "${cacheKey(place)}_${units.name}.json")
     }
 
-    private fun httpGet(url: String): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 15_000
-        conn.setRequestProperty("User-Agent", "BreezeWeather/0.1 (Android)")
-        try {
-            val code = conn.responseCode
-            if (code !in 200..299) throw IOException("Server returned HTTP $code")
-            return conn.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            conn.disconnect()
+    private fun obsFile(place: Place): File = File(cacheDir, "obs_${cacheKey(place)}.json")
+
+    private fun stationFile(place: Place): File = File(cacheDir, "station_${cacheKey(place)}.json")
+
+    private fun readValidStationCache(place: Place): StationLookupCache? {
+        val file = stationFile(place)
+        if (!file.exists()) return null
+        val cached = runCatching { json.decodeFromString<StationLookupCache>(file.readText()) }.getOrNull() ?: return null
+        if (place.distanceKm(cached.placeLat, cached.placeLon) > Observations.STATION_MOVE_KM) return null
+        val maxAge = if (cached.station != null) STATION_FOUND_TTL_MS else STATION_MISSING_TTL_MS
+        if (System.currentTimeMillis() - cached.checkedAt > maxAge) return null
+        return cached
+    }
+
+    private fun discoverStation(place: Place): ObservationStation? {
+        val body = httpGet(
+            Observations.bboxUrl(place.latitude, place.longitude),
+            connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+            readTimeoutMs = OBS_READ_TIMEOUT_MS,
+        )
+        val station = Observations.nearestStation(place, Observations.parse(body, json))
+        val entry = StationLookupCache(
+            station = station,
+            placeLat = place.latitude,
+            placeLon = place.longitude,
+            checkedAt = System.currentTimeMillis(),
+        )
+        runCatching { stationFile(place).writeText(json.encodeToString(entry)) }
+        return station
+    }
+
+    private fun fetchObservations(place: Place): Pair<List<MetarDto>, String>? {
+        val cachedLookup = readValidStationCache(place)
+        var station = if (cachedLookup != null) cachedLookup.station else discoverStation(place)
+        if (station == null) return null
+
+        var body = httpGet(
+            Observations.stationUrl(station.icaoId),
+            connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+            readTimeoutMs = OBS_READ_TIMEOUT_MS,
+        )
+        var metars = Observations.parse(body, json)
+        // If a cached station stopped reporting, look for another nearby station once.
+        if (metars.isEmpty() && cachedLookup != null) {
+            val rediscovered = discoverStation(place) ?: return null
+            if (rediscovered.icaoId != station.icaoId) {
+                station = rediscovered
+                body = httpGet(
+                    Observations.stationUrl(station.icaoId),
+                    connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+                    readTimeoutMs = OBS_READ_TIMEOUT_MS,
+                )
+                metars = Observations.parse(body, json)
+            }
         }
+        if (metars.isEmpty()) return null
+        runCatching { obsFile(place).writeText(body) }
+        return metars to station.label
+    }
+
+    private fun applyCachedObservations(place: Place, weather: Weather): Weather {
+        val lookup = readValidStationCache(place) ?: return weather
+        val station = lookup.station ?: return weather
+        val file = obsFile(place)
+        if (!file.exists()) return weather
+        val metars = runCatching { Observations.parse(file.readText(), json) }.getOrNull().orEmpty()
+        return Observations.merge(weather, metars, station.label)
+    }
+
+    private companion object {
+        const val OBS_CONNECT_TIMEOUT_MS = 4_000
+        const val OBS_READ_TIMEOUT_MS = 7_000
+        const val STATION_FOUND_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        const val STATION_MISSING_TTL_MS = 24L * 60 * 60 * 1000
     }
 
     private fun parseForecast(body: String, units: Units, fetchedAt: Long): Weather {
@@ -214,24 +287,31 @@ class WeatherRepository(context: Context) {
         }
         val hourly = hours.filterNot { it.time.isBefore(startHour) }.take(25)
 
+        val today = currentTime.toLocalDate()
         val d = dto.daily
-        val daily = d.time.indices.mapNotNull { i ->
+        val allDays = d.time.indices.mapNotNull { i ->
             val high = d.temperatureMax.getOrNull(i) ?: return@mapNotNull null
             val low = d.temperatureMin.getOrNull(i) ?: return@mapNotNull null
-            val code = d.weatherCode.getOrNull(i)?.toInt() ?: 3
+            val date = LocalDate.parse(d.time[i])
+            val sunrise = d.sunrise.getOrNull(i)?.let(LocalDateTime::parse)
+            val sunset = d.sunset.getOrNull(i)?.let(LocalDateTime::parse)
+            // The icon follows the daylight hours; the service's whole-day code is the fallback.
+            val code = DayWeather.code(date, sunrise, sunset, hours, fallback = d.weatherCode.getOrNull(i)?.toInt() ?: 3)
             DayForecast(
-                date = LocalDate.parse(d.time[i]),
+                date = date,
                 condition = Condition.fromWmo(code),
                 weatherCode = code,
                 high = high,
                 low = low,
                 precipitationChance = d.precipitationProbabilityMax.getOrNull(i)?.toInt() ?: 0,
-                sunrise = d.sunrise.getOrNull(i)?.let(LocalDateTime::parse),
-                sunset = d.sunset.getOrNull(i)?.let(LocalDateTime::parse),
+                sunrise = sunrise,
+                sunset = sunset,
                 uvMax = d.uvIndexMax.getOrNull(i),
             )
         }
+        val pastDaily = allDays.filter { it.date.isBefore(today) }
+        val daily = allDays.filterNot { it.date.isBefore(today) }
 
-        return Weather(current, hourly, hours, daily, units, fetchedAt, dto.utcOffsetSeconds)
+        return Weather(current, hourly, hours, daily, units, fetchedAt, dto.utcOffsetSeconds, pastDaily = pastDaily)
     }
 }
