@@ -90,6 +90,13 @@ enum class Metric(val label: String, val icon: ImageVector) {
     val hasHistory: Boolean get() = this != PRECIP_CHANCE && this != UV
     val isBars: Boolean get() = this == PRECIP_CHANCE || this == PRECIPITATION || this == UV
 
+    /** Whether [h] carries an actual station observation for this metric. */
+    fun isObserved(h: HourForecast): Boolean = when (this) {
+        PRECIP_CHANCE, UV -> false
+        PRECIPITATION -> h.observedPrecipitation
+        else -> h.observed
+    }
+
     fun format(v: Double, units: Units): String = when (this) {
         TEMPERATURE, FEELS_LIKE -> v.deg()
         PRECIP_CHANCE, HUMIDITY, CLOUD_COVER -> "${v.roundToInt()}%"
