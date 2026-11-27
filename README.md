@@ -3,10 +3,14 @@
 A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 
 <p>
-  <img src="docs/screenshots/home.png" width="200" alt="Home screen" />
-  <img src="docs/screenshots/details.png" width="200" alt="Forecast and details" />
-  <img src="docs/screenshots/day.png" width="200" alt="Day detail with historical average" />
-  <img src="docs/screenshots/locations.png" width="200" alt="Saved locations" />
+  <img src="docs/screenshots/home.png" width="220" alt="Home screen" />
+  <img src="docs/screenshots/details.png" width="220" alt="Forecast, wind and radar preview" />
+  <img src="docs/screenshots/locations.png" width="220" alt="Saved locations" />
+</p>
+<p>
+  <img src="docs/screenshots/day.png" width="220" alt="Today with observed past hours and forecast" />
+  <img src="docs/screenshots/history.png" width="220" alt="Historical day view with station observations" />
+  <img src="docs/screenshots/radar.png" width="220" alt="Full-screen radar map" />
 </p>
 
 ## Features
