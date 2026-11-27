@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -69,6 +71,7 @@ import com.breeze.weather.data.HourForecast
 import com.breeze.weather.data.Place
 import com.breeze.weather.data.Units
 import com.breeze.weather.data.Weather
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -86,16 +89,25 @@ fun DayDetailScreen(
 ) {
     val context = LocalContext.current
     val use24h = remember { DateFormat.is24HourFormat(context) }
-    var dayIndex by rememberSaveable { mutableIntStateOf(initialDay.coerceIn(0, weather.daily.lastIndex)) }
+    val allDays = remember(weather) { weather.allDays }
+    if (allDays.isEmpty()) return
+    val now = weather.localNow()
+    val today = now.toLocalDate()
+    val todayIndex = allDays.indexOfFirst { !it.date.isBefore(today) }.let { if (it >= 0) it else allDays.lastIndex }
+    val defaultDate = weather.daily
+        .getOrNull(initialDay.coerceIn(0, (weather.daily.lastIndex).coerceAtLeast(0)))?.date
+        ?: allDays[todayIndex].date
+    var selectedDateIso by rememberSaveable(initialDay) { mutableStateOf(defaultDate.toString()) }
+    val dayIndex = allDays.indexOfFirst { it.date.toString() == selectedDateIso }.takeIf { it >= 0 } ?: todayIndex
     var metric by rememberSaveable { mutableStateOf(Metric.TEMPERATURE) }
     var selected by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(place.id, weather.units) { onLoadHistory() }
+    LaunchedEffect(place.id, weather.units, weather.pastDaily.firstOrNull()?.date) { onLoadHistory() }
 
-    val day = weather.daily[dayIndex]
-    val hours = remember(weather, dayIndex) { weather.hoursOn(day.date) }
+    val day = allDays[dayIndex]
+    val hours = remember(weather, day.date) { weather.hoursOn(day.date) }
     val hist = remember(history?.data, hours) { hours.map { history?.data?.get(it.time) } }
-    val now = weather.localNow()
-    val isToday = day.date == now.toLocalDate()
+    val isToday = day.date == today
+    val isPast = day.date.isBefore(today)
     val nowHour = if (isToday) now.hour + now.minute / 60f else null
 
     val colors = day.condition.gradient(true)
@@ -132,7 +144,10 @@ fun DayDetailScreen(
             }
 
             Spacer(Modifier.height(12.dp))
-            DaySelector(weather.daily, dayIndex, now.toLocalDate()) { dayIndex = it; selected = null }
+            DaySelector(allDays, dayIndex, today, todayIndex) {
+                selectedDateIso = allDays[it].date.toString()
+                selected = null
+            }
             Spacer(Modifier.height(20.dp))
 
             // Day hero.
@@ -154,7 +169,7 @@ fun DayDetailScreen(
             Spacer(Modifier.height(12.dp))
 
             GlassCard(title = metric.label, icon = metric.icon) {
-                val header = headerFor(metric, day, hours, hist, selected, weather.units, use24h)
+                val header = headerFor(metric, day, hours, hist, selected, weather.units, use24h, isPast)
                 Text(header.label, style = MaterialTheme.typography.labelMedium, color = OnSky.copy(alpha = 0.7f))
                 Text(header.value, fontSize = 30.sp, color = OnSky)
                 Text(
@@ -175,33 +190,39 @@ fun DayDetailScreen(
                     use24h = use24h,
                 )
                 Spacer(Modifier.height(10.dp))
-                Legend(metric, history, hasObserved = hours.any { metric.isObserved(it) })
+                Legend(metric, history, isPast = isPast, hasObserved = hours.any { metric.isObserved(it) })
             }
 
             Spacer(Modifier.height(12.dp))
             GlassCard(title = "Daily summary", icon = Icons.AutoMirrored.Rounded.Notes) {
                 Text(
-                    summaryFor(day, hours, hist, weather.units, use24h),
+                    summaryFor(day, hours, hist, weather.units, use24h, isPast),
                     style = MaterialTheme.typography.bodyMedium,
                     color = OnSky,
                 )
             }
 
             Spacer(Modifier.height(12.dp))
-            DayStats(hours, day, weather.units)
+            DayStats(hours, day, weather.units, isPast)
 
             Spacer(Modifier.height(12.dp))
             SunCard(
                 sunrise = day.sunrise,
                 sunset = day.sunset,
                 now = if (isToday) now else null,
-                nextSunrise = weather.daily.getOrNull(dayIndex + 1)?.sunrise,
+                nextSunrise = allDays.getOrNull(dayIndex + 1)?.sunrise,
                 use24h = use24h,
+                isPast = isPast,
             )
-            if (isToday && weather.observationStation != null && hours.any { it.observed }) {
+            if ((isToday || isPast) && weather.observationStation != null && hours.any { it.observed }) {
                 Spacer(Modifier.height(14.dp))
+                val label = if (isToday) {
+                    "Past hours observed at ${weather.observationStation}"
+                } else {
+                    "Observed at ${weather.observationStation}"
+                }
                 Text(
-                    "Past hours observed at ${weather.observationStation}",
+                    label,
                     style = MaterialTheme.typography.labelSmall,
                     color = OnSky.copy(alpha = 0.55f),
                     textAlign = TextAlign.Center,
@@ -214,45 +235,86 @@ fun DayDetailScreen(
 }
 
 @Composable
-private fun DaySelector(days: List<DayForecast>, selected: Int, today: java.time.LocalDate, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth()) {
-        days.forEachIndexed { i, d ->
-            val isSel = i == selected
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(MaterialTheme.shapes.medium)
-                    .clickable { onSelect(i) }
-                    .padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    d.date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = OnSky.copy(alpha = if (isSel) 1f else 0.7f),
-                    maxLines = 1,
-                )
-                Spacer(Modifier.height(4.dp))
-                Box(
+private fun DaySelector(
+    days: List<DayForecast>,
+    selected: Int,
+    today: LocalDate,
+    todayIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = todayIndex)
+    var lastTodayIndex by remember { mutableIntStateOf(todayIndex) }
+    LaunchedEffect(todayIndex) {
+        if (todayIndex > lastTodayIndex && listState.firstVisibleItemIndex == lastTodayIndex) {
+            listState.scrollToItem(todayIndex)
+        }
+        lastTodayIndex = todayIndex
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Fit all 10 forecast days across the width starting at today; historical days sit to the left.
+        val itemWidth = maxWidth / 10
+        LazyRow(state = listState, modifier = Modifier.fillMaxWidth()) {
+            itemsIndexed(days, key = { _, d -> d.date.toEpochDay() }) { i, d ->
+                val isSel = i == selected
+                val isPast = d.date.isBefore(today)
+                val labelAlpha = when {
+                    isSel && isPast -> 0.85f
+                    isSel -> 1f
+                    isPast -> 0.45f
+                    else -> 0.7f
+                }
+                val circleBg = when {
+                    isSel && isPast -> Color.White.copy(alpha = 0.82f)
+                    isSel -> Color.White
+                    else -> Color.Transparent
+                }
+                val numColor = when {
+                    isSel -> Color(0xFF1B2440)
+                    isPast -> OnSky.copy(alpha = 0.52f)
+                    else -> OnSky
+                }
+                val iconAlpha = when {
+                    isSel && isPast -> 0.85f
+                    isSel -> 1f
+                    isPast -> 0.5f
+                    else -> 0.8f
+                }
+                Column(
                     Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(if (isSel) Color.White else Color.Transparent)
-                        .then(
-                            if (d.date == today && !isSel) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
-                            else Modifier
-                        ),
-                    contentAlignment = Alignment.Center,
+                        .width(itemWidth)
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { onSelect(i) }
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        d.date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSel) Color(0xFF1B2440) else OnSky,
+                        d.date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = OnSky.copy(alpha = labelAlpha),
+                        maxLines = 1,
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(circleBg)
+                            .then(
+                                if (d.date == today && !isSel) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                                else Modifier
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            d.date.dayOfMonth.toString(),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            color = numColor,
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    WeatherIcon(d.weatherCode, isDay = true, modifier = Modifier.size(14.dp).alpha(iconAlpha))
                 }
-                Spacer(Modifier.height(2.dp))
-                WeatherIcon(d.weatherCode, isDay = true, modifier = Modifier.size(14.dp).alpha(if (isSel) 1f else 0.8f))
             }
         }
     }
@@ -286,22 +348,34 @@ private fun MetricSelector(selected: Metric, onSelect: (Metric) -> Unit) {
 }
 
 @Composable
-private fun Legend(metric: Metric, history: HistoryState?, hasObserved: Boolean) {
+private fun Legend(metric: Metric, history: HistoryState?, isPast: Boolean, hasObserved: Boolean) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (hasObserved) {
+        if (isPast) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LegendLine(dashed = false, color = metric.legendColor(), alpha = 0.4f)
+                LegendLine(dashed = false, color = metric.legendColor())
                 Spacer(Modifier.width(6.dp))
-                Text("Observed", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+                Text(
+                    if (hasObserved) "Observed" else "Estimated",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnSky.copy(alpha = 0.75f),
+                )
             }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            LegendLine(dashed = false, color = metric.legendColor())
-            Spacer(Modifier.width(6.dp))
-            Text("Forecast", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+        } else {
+            if (hasObserved) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LegendLine(dashed = false, color = metric.legendColor(), alpha = 0.4f)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Observed", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LegendLine(dashed = false, color = metric.legendColor())
+                Spacer(Modifier.width(6.dp))
+                Text("Forecast", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+            }
         }
         if (metric == Metric.WIND) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -353,15 +427,20 @@ private fun LegendLine(
 }
 
 @Composable
-private fun DayStats(hours: List<HourForecast>, day: DayForecast, units: Units) {
+private fun DayStats(hours: List<HourForecast>, day: DayForecast, units: Units, isPast: Boolean) {
     val precip = hours.sumOf { it.precipitation ?: 0.0 }
     val maxWind = hours.maxOfOrNull { it.windSpeed ?: 0.0 } ?: 0.0
     val maxGust = hours.maxOfOrNull { it.windGusts ?: 0.0 } ?: 0.0
     val hum = hours.mapNotNull { it.humidity }
     val cloud = hours.mapNotNull { it.cloudCover }
+    val precipCaption = when {
+        isPast && hours.any { it.observedPrecipitation } -> "Measured at station"
+        isPast -> "Estimated total"
+        else -> "Chance up to ${day.precipitationChance}%"
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile("Precipitation", Icons.Rounded.Grain, formatPrecip(precip, units), "Chance up to ${day.precipitationChance}%", Modifier.weight(1f))
+            StatTile("Precipitation", Icons.Rounded.Grain, formatPrecip(precip, units), precipCaption, Modifier.weight(1f))
             StatTile(
                 "Wind", Icons.Rounded.Air, "${maxWind.roundToInt()} ${units.windLabel}",
                 "Gusts up to ${maxGust.roundToInt()} ${units.windLabel}", Modifier.weight(1f),
@@ -410,6 +489,7 @@ private fun headerFor(
     selected: Int?,
     units: Units,
     use24h: Boolean,
+    isPast: Boolean,
 ): HeaderText {
     if (selected != null && selected in hours.indices) {
         val h = hours[selected]
@@ -428,7 +508,11 @@ private fun headerFor(
             avg?.let { add("Avg ${metric.format(it, units)}") }
         }
         val clock = formatClock(h.time, use24h)
-        val label = if (metric.isObserved(h)) "$clock · Observed" else clock
+        val label = when {
+            metric.isObserved(h) -> "$clock · Observed"
+            isPast -> "$clock · Estimated"
+            else -> clock
+        }
         return HeaderText(label, v?.let { metric.format(it, units) } ?: "—", parts.joinToString(" · ").ifBlank { null })
     }
 
@@ -447,9 +531,10 @@ private fun headerFor(
         )
         Metric.PRECIP_CHANCE -> {
             val peak = hours.maxBy { it.precipitationChance }
+            val prefix = if (isPast) "Peak chance around" else "Most likely around"
             HeaderText(
                 "Chance of precipitation", "${day.precipitationChance}%",
-                if (peak.precipitationChance >= 10) "Most likely around ${formatHour(peak.time, use24h)}" else "Little chance of rain",
+                if (peak.precipitationChance >= 10) "$prefix ${formatHour(peak.time, use24h)}" else "Little chance of rain",
             )
         }
         Metric.PRECIPITATION -> HeaderText(
@@ -482,6 +567,7 @@ private fun summaryFor(
     hist: List<HistoryHour?>,
     units: Units,
     use24h: Boolean,
+    isPast: Boolean,
 ): String = buildString {
     append("${Condition.describe(day.weatherCode, true)} with a high of ${day.high.deg()} and a low of ${day.low.deg()}.")
 
@@ -490,12 +576,13 @@ private fun summaryFor(
         val avgHigh = histTemps.max()
         val diff = day.high - avgHigh
         val diffC = units.deltaToC(diff)
+        val copula = if (isPast) "That was" else "That's"
         append(' ')
         append(
             when {
-                abs(diffC) < 1 -> "That's about normal for this time of year (average high ${avgHigh.deg()})."
-                diff > 0 -> "That's ${abs(diff).roundToInt()}° warmer than the 10-year average high of ${avgHigh.deg()}."
-                else -> "That's ${abs(diff).roundToInt()}° cooler than the 10-year average high of ${avgHigh.deg()}."
+                abs(diffC) < 1 -> "$copula about normal for this time of year (average high ${avgHigh.deg()})."
+                diff > 0 -> "$copula ${abs(diff).roundToInt()}° warmer than the 10-year average high of ${avgHigh.deg()}."
+                else -> "$copula ${abs(diff).roundToInt()}° cooler than the 10-year average high of ${avgHigh.deg()}."
             }
         )
     }
@@ -504,12 +591,37 @@ private fun summaryFor(
     val word = if (snowy) "Snow" else "Rain"
     // Peak = likeliest hour, ties broken by the wettest one.
     val peak = hours.maxWithOrNull(compareBy({ it.precipitationChance }, { it.precipitation ?: 0.0 }))
+    val wettest = hours.maxByOrNull { it.precipitation ?: 0.0 }
     val total = hours.sumOf { it.precipitation ?: 0.0 }
     // Showers can add up to a real amount even when no single hour is very likely, so the
     // total counts too (≥ 1 mm / 0.04 in).
     val meaningfulTotal = total >= if (units == Units.IMPERIAL) 0.04 else 1.0
     append(' ')
-    if (peak != null && (peak.precipitationChance >= 30 || meaningfulTotal)) {
+    if (isPast) {
+        val observedPrecip = hours.any { it.observedPrecipitation }
+        val wetCondition = day.condition in setOf(Condition.RAIN, Condition.DRIZZLE, Condition.SNOW, Condition.STORM)
+        when {
+            meaningfulTotal -> {
+                val focus = wettest?.takeIf { (it.precipitation ?: 0.0) > 0 } ?: peak
+                append("About ${formatPrecip(total, units)} of ${word.lowercase()}")
+                append(if (observedPrecip) " recorded" else " fell")
+                if (focus != null) append(", heaviest around ${formatHour(focus.time, use24h)}")
+                append('.')
+            }
+            hours.any { it.observed } && wetCondition -> {
+                val focus = hours.firstOrNull {
+                    it.observed && it.condition in setOf(Condition.RAIN, Condition.DRIZZLE, Condition.SNOW, Condition.STORM)
+                } ?: peak
+                if (focus != null) append("$word was reported around ${formatHour(focus.time, use24h)}.")
+                else append("$word was reported during the day.")
+            }
+            peak != null && peak.precipitationChance >= 30 && !hours.any { it.observed } -> {
+                append("$word was most likely around ${formatHour(peak.time, use24h)} (${peak.precipitationChance}%).")
+            }
+            hours.any { it.observed } -> append("No significant ${word.lowercase()} recorded.")
+            else -> append("No significant ${word.lowercase()}.")
+        }
+    } else if (peak != null && (peak.precipitationChance >= 30 || meaningfulTotal)) {
         append("$word is most likely around ${formatHour(peak.time, use24h)} (${peak.precipitationChance}%)")
         if (total >= 0.005) append(", with about ${formatPrecip(total, units)} expected")
         append('.')
@@ -519,6 +631,7 @@ private fun summaryFor(
 
     val gust = hours.mapNotNull { it.windGusts }.maxOrNull()
     if (gust != null && units.toKmh(gust) >= 40) {
-        append(" Gusts could reach ${gust.roundToInt()} ${units.windLabel}.")
+        val verb = if (isPast) "reached" else "could reach"
+        append(" Gusts $verb ${gust.roundToInt()} ${units.windLabel}.")
     }
 }

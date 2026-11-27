@@ -8,6 +8,7 @@ import kotlinx.serialization.json.doubleOrNull
 import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -18,10 +19,17 @@ import kotlin.math.exp
 
 /**
  * Nearby weather-station observations (METAR from the Aviation Weather Center, free and keyless)
- * used to replace the past hours of today with what actually happened. Pure parsing and merging
- * logic so everything here can be unit-tested without a network or Android framework.
+ * used to replace past hours (across recent historical days and today) with what actually happened.
+ * Pure parsing and merging logic so everything here can be unit-tested without a network or
+ * Android framework.
  */
 object Observations {
+
+    /** Number of past days to fetch alongside the 10-day forecast for historical browsing. */
+    const val PAST_DAYS = 7
+
+    /** Default lookback window covering [PAST_DAYS] full days plus today. */
+    const val DEFAULT_OBS_HOURS = (PAST_DAYS + 1) * 24 + 4
 
     /** Ignore stations farther than this so distant airports don't misrepresent local weather. */
     const val MAX_STATION_KM = 60.0
@@ -51,7 +59,7 @@ object Observations {
     }
 
     /** Query for the last [hours] of METAR/SPECI observations from one station. */
-    fun stationUrl(icaoId: String, hours: Int = 26): String {
+    fun stationUrl(icaoId: String, hours: Int = DEFAULT_OBS_HOURS): String {
         val id = URLEncoder.encode(icaoId.trim(), "UTF-8")
         return "$BASE_URL?ids=$id&hours=$hours&format=json"
     }
@@ -92,14 +100,15 @@ object Observations {
     }
 
     /**
-     * Replaces today's past hours (up through the current hour) in [weather] with observed values
-     * from [metars], and updates today's high, low and daylight weather code to match.
-     * Returns [weather] unchanged if no observations cover today's past hours.
+     * Replaces past hours (across historical days and today up through the current hour) in
+     * [weather] with observed values from [metars], and updates each affected day's high, low and
+     * daylight weather code to match. Returns [weather] unchanged if no observations match.
      */
     internal fun merge(weather: Weather, metars: List<MetarDto>, stationLabel: String?): Weather {
         if (metars.isEmpty()) return weather
         val zone = ZoneOffset.ofTotalSeconds(weather.utcOffsetSeconds)
         val today = weather.current.time.toLocalDate()
+        val earliestDate = (weather.pastDaily.firstOrNull() ?: weather.daily.firstOrNull())?.date ?: today
         val currentHour = weather.current.time.truncatedTo(ChronoUnit.HOURS)
 
         // Group each observation into the nearest top-of-hour bucket (handles US :53 reports -> next :00).
@@ -108,36 +117,38 @@ object Observations {
             val epoch = m.obsTime ?: continue
             val local = Instant.ofEpochSecond(epoch).atOffset(zone).toLocalDateTime()
             val bucket = local.plusMinutes(30).truncatedTo(ChronoUnit.HOURS)
-            if (bucket.toLocalDate() == today && !bucket.isAfter(currentHour)) {
+            if (!bucket.toLocalDate().isBefore(earliestDate) && !bucket.isAfter(currentHour)) {
                 byHour.getOrPut(bucket) { mutableListOf() }.add(local to m)
             }
         }
         if (byHour.isEmpty()) return weather
 
-        var anyMerged = false
+        val observedDates = HashSet<LocalDate>()
         val mergedHours = weather.hours.map { hour ->
             val group = byHour[hour.time] ?: return@map hour
             val merged = mergeHour(hour, group, weather.units)
-            if (merged !== hour) anyMerged = true
+            if (merged !== hour) observedDates += hour.time.toLocalDate()
             merged
         }
-        if (!anyMerged) return weather
+        if (observedDates.isEmpty()) return weather
+
+        fun updateDay(day: DayForecast): DayForecast {
+            if (day.date !in observedDates) return day
+            val dayHours = mergedHours.filter { it.time.toLocalDate() == day.date }
+            val high = dayHours.maxOfOrNull { it.temperature } ?: day.high
+            val low = dayHours.minOfOrNull { it.temperature } ?: day.low
+            val code = DayWeather.code(day.date, day.sunrise, day.sunset, mergedHours, fallback = day.weatherCode)
+            return day.copy(high = high, low = low, weatherCode = code, condition = Condition.fromWmo(code))
+        }
 
         val mergedHourly = mergedHours.filterNot { it.time.isBefore(currentHour) }.take(25)
-        val mergedDaily = weather.daily.map { day ->
-            if (day.date != today) day
-            else {
-                val todayHours = mergedHours.filter { it.time.toLocalDate() == today }
-                val high = todayHours.maxOfOrNull { it.temperature } ?: day.high
-                val low = todayHours.minOfOrNull { it.temperature } ?: day.low
-                val code = DayWeather.code(today, day.sunrise, day.sunset, mergedHours, fallback = day.weatherCode)
-                day.copy(high = high, low = low, weatherCode = code, condition = Condition.fromWmo(code))
-            }
-        }
+        val mergedPastDaily = weather.pastDaily.map(::updateDay)
+        val mergedDaily = weather.daily.map(::updateDay)
 
         return weather.copy(
             hourly = mergedHourly,
             hours = mergedHours,
+            pastDaily = mergedPastDaily,
             daily = mergedDaily,
             observationStation = stationLabel,
         )

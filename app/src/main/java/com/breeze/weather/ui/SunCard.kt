@@ -36,7 +36,7 @@ private val SunYellow = Color(0xFFFFD54F)
 
 /**
  * Sunrise and sunset on one card, with the sun's path across the day drawn as a curve: solid for
- * time already passed, dotted for what's ahead. [now] is null for days that haven't started.
+ * time already passed, dotted for what's ahead. [now] is null for days that aren't today.
  */
 @Composable
 fun SunCard(
@@ -45,11 +45,12 @@ fun SunCard(
     now: LocalDateTime?,
     nextSunrise: LocalDateTime?,
     use24h: Boolean,
+    isPast: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     GlassCard(title = "Sunrise & sunset", icon = Icons.Rounded.WbTwilight, modifier = modifier) {
         if (sunrise == null || sunset == null) {
-            Text("No sunrise or sunset today", style = MaterialTheme.typography.bodyMedium, color = OnSky)
+            Text("No sunrise or sunset", style = MaterialTheme.typography.bodyMedium, color = OnSky)
             return@GlassCard
         }
         val daylight = Duration.between(sunrise, sunset)
@@ -83,14 +84,14 @@ fun SunCard(
             }
         }
         Spacer(Modifier.height(8.dp))
-        SunCurve(sunrise, sunset, now, use24h)
+        SunCurve(sunrise, sunset, now, isPast, use24h)
     }
 }
 
 private fun LocalDateTime.hourOfDay(): Float = hour + minute / 60f + second / 3600f
 
 @Composable
-private fun SunCurve(sunrise: LocalDateTime, sunset: LocalDateTime, now: LocalDateTime?, use24h: Boolean) {
+private fun SunCurve(sunrise: LocalDateTime, sunset: LocalDateTime, now: LocalDateTime?, isPast: Boolean, use24h: Boolean) {
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
     val riseText = formatClock(sunrise, use24h)
@@ -131,7 +132,7 @@ private fun SunCurve(sunrise: LocalDateTime, sunset: LocalDateTime, now: LocalDa
             samples.forEachIndexed { i, t -> if (i == 0) moveTo(x(t), y(values[i])) else lineTo(x(t), y(values[i])) }
         }
         val nowT: Float = when {
-            now == null -> 0f
+            now == null -> if (isPast) 24f else 0f
             now.toLocalDate().isAfter(sunrise.toLocalDate()) -> 24f
             now.toLocalDate().isBefore(sunrise.toLocalDate()) -> 0f
             else -> now.hourOfDay()

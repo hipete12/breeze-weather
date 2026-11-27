@@ -190,7 +190,7 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
         val existing = weather.value[place.id]
         val units = store.units.value
         val fresh = existing?.weather?.let {
-            it.units == units && System.currentTimeMillis() - it.fetchedAt < STALE_AFTER_MS
+            it.units == units && it.pastDaily.isNotEmpty() && System.currentTimeMillis() - it.fetchedAt < STALE_AFTER_MS
         } ?: false
         if (fresh && !force) return
         if (jobs[place.id]?.isActive == true) return
@@ -249,11 +249,15 @@ class WeatherViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- History ----------
 
     fun loadHistory(place: Place) {
+        val weather = state.value.weather[place.id]?.weather ?: return
+        val start = (weather.pastDaily.firstOrNull() ?: weather.daily.firstOrNull())?.date ?: return
+        val end = weather.daily.lastOrNull()?.date ?: return
         val existing = _history.value[place.id]
-        if (existing != null && (existing.loading || existing.data != null)) return
-        val days = state.value.weather[place.id]?.weather?.daily ?: return
-        val start = days.firstOrNull()?.date ?: return
-        val end = days.last().date
+        if (existing != null) {
+            if (existing.loading) return
+            val data = existing.data
+            if (data != null && data.keys.any { it.toLocalDate() == start }) return
+        }
         val units = store.units.value
         _history.update { it + (place.id to HistoryState(loading = true)) }
         viewModelScope.launch {

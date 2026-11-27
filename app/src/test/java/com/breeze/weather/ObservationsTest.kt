@@ -346,12 +346,107 @@ class ObservationsTest {
         assertEquals(26.0 * 1.852, h10.windGusts!!, 0.05) // max gust in the hour
     }
 
-    @Test fun mergeReturnsOriginalWhenNoObservationsMatchToday() {
+    @Test fun mergeReturnsOriginalWhenNoObservationsMatchWeatherDates() {
         val weather = forecastWeather(Units.METRIC)
-        val yesterdayObs = listOf(
+        val outOfRangeObs = listOf(
             MetarDto(obsTime = epoch(today.minusDays(1).atTime(12, 0)), temp = 5.0)
         )
-        assertSame(weather, Observations.merge(weather, yesterdayObs, "KJFK"))
+        assertSame(weather, Observations.merge(weather, outOfRangeObs, "KJFK"))
         assertSame(weather, Observations.merge(weather, emptyList(), "KJFK"))
+    }
+
+    @Test fun mergeUpdatesPastDaysAndKeepsUnobservedPastDaysIntact() {
+        val base = forecastWeather(Units.METRIC)
+        val twoDaysAgo = today.minusDays(2)
+        val yesterday = today.minusDays(1)
+        val pastHours = (0 until 48).map { i ->
+            val time = twoDaysAgo.atStartOfDay().plusHours(i.toLong())
+            HourForecast(
+                time = time,
+                temperature = 10.0,
+                condition = Condition.PARTLY_CLOUDY,
+                weatherCode = 2,
+                isDay = time.hour in 7..17,
+                precipitationChance = 15,
+                feelsLike = 9.0,
+                humidity = 60.0,
+                precipitation = 0.0,
+                windSpeed = 10.0,
+                windGusts = 18.0,
+                windDirection = 180.0,
+                uvIndex = 1.0,
+                cloudCover = 50.0,
+            )
+        }
+        val pastDays = listOf(
+            DayForecast(
+                date = twoDaysAgo,
+                condition = Condition.PARTLY_CLOUDY,
+                weatherCode = 2,
+                high = 16.0,
+                low = 7.0,
+                precipitationChance = 15,
+                sunrise = twoDaysAgo.atTime(7, 0),
+                sunset = twoDaysAgo.atTime(16, 32),
+                uvMax = 3.0,
+            ),
+            DayForecast(
+                date = yesterday,
+                condition = Condition.PARTLY_CLOUDY,
+                weatherCode = 2,
+                high = 14.0,
+                low = 6.0,
+                precipitationChance = 20,
+                sunrise = yesterday.atTime(7, 0),
+                sunset = yesterday.atTime(16, 31),
+                uvMax = 3.0,
+            ),
+        )
+        val weather = base.copy(hours = pastHours + base.hours, pastDaily = pastDays)
+
+        val metars = listOf(
+            // Yesterday morning: colder than model low (6 -> 1)
+            MetarDto(
+                obsTime = epoch(yesterday.atTime(6, 53)),
+                temp = 1.0,
+                dewp = -1.0,
+                clouds = listOf(MetarCloudDto("CLR")),
+            ),
+            // Yesterday noon: snow & warmer peak than model (14 -> 17)
+            MetarDto(
+                obsTime = epoch(yesterday.atTime(12, 53)),
+                temp = 17.0,
+                dewp = 10.0,
+                wxString = "-SN",
+                clouds = listOf(MetarCloudDto("OVC")),
+            ),
+            // Today morning: observed 5°C
+            MetarDto(
+                obsTime = epoch(today.atTime(8, 0)),
+                temp = 5.0,
+                clouds = listOf(MetarCloudDto("FEW")),
+            ),
+        )
+
+        val merged = Observations.merge(weather, metars, "KLGA")
+
+        // Two days ago had no METAR observations, so its summary stays untouched.
+        assertEquals(pastDays[0], merged.pastDaily[0])
+        assertTrue(merged.hours.filter { it.time.toLocalDate() == twoDaysAgo }.none { it.observed })
+
+        // Yesterday's observed hours, high/low and icon reflect what actually happened.
+        val yestMerged = merged.pastDaily[1]
+        assertEquals(17.0, yestMerged.high, 0.001)
+        assertEquals(1.0, yestMerged.low, 0.001)
+        assertEquals(71, yestMerged.weatherCode)
+        assertEquals(Condition.SNOW, yestMerged.condition)
+        assertTrue(merged.hours.first { it.time == yesterday.atTime(7, 0) }.observed)
+        assertTrue(merged.hours.first { it.time == yesterday.atTime(13, 0) }.observed)
+
+        // Today also reflects its observed hour and low.
+        assertEquals(5.0, merged.daily[0].low, 0.001)
+        assertTrue(merged.hours.first { it.time == today.atTime(8, 0) }.observed)
+        // Tomorrow stays untouched.
+        assertEquals(weather.daily[1], merged.daily[1])
     }
 }
