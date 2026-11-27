@@ -72,6 +72,8 @@ data class Weather(
     val units: Units,
     val fetchedAt: Long,
     val utcOffsetSeconds: Int,
+    /** Nearest weather station whose observations cover today's past hours, if any. */
+    val observationStation: String? = null,
 ) {
     /** Wall-clock time right now at this place. */
     fun localNow(): LocalDateTime =
@@ -145,6 +147,10 @@ data class HourForecast(
     val windDirection: Double?,
     val uvIndex: Double?,
     val cloudCover: Double?,
+    /** True when this hour's weather and temperature come from station observations, not a forecast. */
+    val observed: Boolean = false,
+    /** True when [precipitation] itself was measured by the station (not all METAR stations report it). */
+    val observedPrecipitation: Boolean = false,
 )
 
 /** Multi-year average for one local hour, used as the "historical average" overlay. */

@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -174,7 +175,7 @@ fun DayDetailScreen(
                     use24h = use24h,
                 )
                 Spacer(Modifier.height(10.dp))
-                Legend(metric, history)
+                Legend(metric, history, hasObserved = hours.any { metric.isObserved(it) })
             }
 
             Spacer(Modifier.height(12.dp))
@@ -197,6 +198,16 @@ fun DayDetailScreen(
                 nextSunrise = weather.daily.getOrNull(dayIndex + 1)?.sunrise,
                 use24h = use24h,
             )
+            if (isToday && weather.observationStation != null && hours.any { it.observed }) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Past hours observed at ${weather.observationStation}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnSky.copy(alpha = 0.55f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -275,31 +286,45 @@ private fun MetricSelector(selected: Metric, onSelect: (Metric) -> Unit) {
 }
 
 @Composable
-private fun Legend(metric: Metric, history: HistoryState?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        LegendLine(dashed = false, color = metric.legendColor())
-        Spacer(Modifier.width(6.dp))
-        Text("Forecast", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
-        if (metric == Metric.WIND) {
-            Spacer(Modifier.width(14.dp))
-            LegendLine(dashed = true, dotted = true, color = metric.legendColor())
+private fun Legend(metric: Metric, history: HistoryState?, hasObserved: Boolean) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (hasObserved) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LegendLine(dashed = false, color = metric.legendColor(), alpha = 0.4f)
+                Spacer(Modifier.width(6.dp))
+                Text("Observed", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LegendLine(dashed = false, color = metric.legendColor())
             Spacer(Modifier.width(6.dp))
-            Text("Gusts", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+            Text("Forecast", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+        }
+        if (metric == Metric.WIND) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LegendLine(dashed = true, dotted = true, color = metric.legendColor())
+                Spacer(Modifier.width(6.dp))
+                Text("Gusts", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+            }
         }
         if (metric.hasHistory) {
-            Spacer(Modifier.width(14.dp))
-            when {
-                history?.data != null -> {
-                    LegendLine(dashed = true)
-                    Spacer(Modifier.width(6.dp))
-                    Text("10-year average", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
-                }
-                history?.failed == true ->
-                    Text("Historical average unavailable", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.55f))
-                else -> {
-                    CircularProgressIndicator(Modifier.size(10.dp), color = OnSky, strokeWidth = 1.5.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Loading historical average…", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.55f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                when {
+                    history?.data != null -> {
+                        LegendLine(dashed = true)
+                        Spacer(Modifier.width(6.dp))
+                        Text("10-year average", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.75f))
+                    }
+                    history?.failed == true ->
+                        Text("Historical average unavailable", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.55f))
+                    else -> {
+                        CircularProgressIndicator(Modifier.size(10.dp), color = OnSky, strokeWidth = 1.5.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Loading historical average…", style = MaterialTheme.typography.labelSmall, color = OnSky.copy(alpha = 0.55f))
+                    }
                 }
             }
         }
@@ -307,7 +332,12 @@ private fun Legend(metric: Metric, history: HistoryState?) {
 }
 
 @Composable
-private fun LegendLine(dashed: Boolean, dotted: Boolean = false, color: Color = Color.White) {
+private fun LegendLine(
+    dashed: Boolean,
+    dotted: Boolean = false,
+    color: Color = Color.White,
+    alpha: Float = if (dashed) 0.7f else 1f,
+) {
     Canvas(Modifier.width(18.dp).height(8.dp)) {
         val effect = when {
             dotted -> PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 3.dp.toPx()))
@@ -315,7 +345,7 @@ private fun LegendLine(dashed: Boolean, dotted: Boolean = false, color: Color = 
             else -> null
         }
         drawLine(
-            color.copy(alpha = if (dashed) 0.7f else 1f),
+            color.copy(alpha = alpha),
             Offset(0f, size.height / 2), Offset(size.width, size.height / 2),
             strokeWidth = (if (dashed) 1.6.dp else 3.dp).toPx(), pathEffect = effect,
         )
@@ -397,7 +427,9 @@ private fun headerFor(
             }
             avg?.let { add("Avg ${metric.format(it, units)}") }
         }
-        return HeaderText(formatClock(h.time, use24h), v?.let { metric.format(it, units) } ?: "—", parts.joinToString(" · ").ifBlank { null })
+        val clock = formatClock(h.time, use24h)
+        val label = if (metric.isObserved(h)) "$clock · Observed" else clock
+        return HeaderText(label, v?.let { metric.format(it, units) } ?: "—", parts.joinToString(" · ").ifBlank { null })
     }
 
     val vals = hours.mapNotNull(metric::value)

@@ -49,7 +49,8 @@ A clean, modern Android weather app built with Kotlin and Jetpack Compose.
 - **Fast start and offline-friendly.** The last forecast for each place is cached on disk and
   shown instantly, then refreshed in the background. Pull down to refresh.
 - **No API key needed.** Forecasts, geocoding and historical data come from [Open-Meteo](https://open-meteo.com/);
-  the radar map uses RainViewer and OpenFreeMap, which need no keys either.
+  today's observed past hours come from [Aviation Weather Center](https://aviationweather.gov/)
+  METAR stations; the radar map uses RainViewer and OpenFreeMap, which need no keys either.
 - **No Google Play Services dependency.** Location uses the platform `LocationManager`
   (with the fused provider on Android 12+).
 
@@ -217,6 +218,7 @@ app/src/main/java/com/breeze/weather/
 │   ├── Models.kt            # Domain models + Open-Meteo DTOs
 │   ├── Condition.kt         # WMO weather code → condition/description
 │   ├── WeatherRepository.kt # Forecast, geocoding and 10-year history client with disk cache
+│   ├── Observations.kt      # Nearby METAR station lookup, parsing and merging for today's past hours (pure, tested)
 │   ├── MapData.kt           # Radar frames (RainViewer), map grids and forecast fields (pure, tested)
 │   ├── MapRepository.kt     # Fetches radar frames and forecast fields for the map
 │   ├── LocationProvider.kt  # Precise current location + reverse geocoding

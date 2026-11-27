@@ -31,8 +31,10 @@ class WeatherRepository(context: Context) {
     suspend fun cached(place: Place, units: Units): Weather? = withContext(Dispatchers.IO) {
         val file = cacheFile(place, units)
         if (!file.exists()) return@withContext null
-        runCatching { parseForecast(file.readText(), units, file.lastModified()) }.getOrNull()
-            ?.let { it.rebasedTo(it.localNow()) }
+        runCatching {
+            val parsed = parseForecast(file.readText(), units, file.lastModified())
+            applyCachedObservations(place, parsed)
+        }.getOrNull()?.let { it.rebasedTo(it.localNow()) }
     }
 
     suspend fun forecast(place: Place, units: Units): Weather = withContext(Dispatchers.IO) {
@@ -52,11 +54,19 @@ class WeatherRepository(context: Context) {
             append("&precipitation_unit=").append(units.precipParam)
             append("&timezone=auto&forecast_days=10")
         }
-        val body = httpGet(url)
+        val (body, observed) = coroutineScope {
+            val forecastDeferred = async { httpGet(url) }
+            val obsDeferred = async { runCatching { fetchObservations(place) }.getOrNull() }
+            forecastDeferred.await() to obsDeferred.await()
+        }
         val now = System.currentTimeMillis()
         val weather = parseForecast(body, units, now)
         runCatching { cacheFile(place, units).writeText(body) }
-        weather
+        if (observed != null) {
+            Observations.merge(weather, observed.first, observed.second)
+        } else {
+            applyCachedObservations(place, weather)
+        }
     }
 
     suspend fun search(query: String): List<Place> = withContext(Dispatchers.IO) {
@@ -149,10 +159,88 @@ class WeatherRepository(context: Context) {
 
     fun clearCache(place: Place) {
         Units.entries.forEach { cacheFile(place, it).delete() }
+        obsFile(place).delete()
+        stationFile(place).delete()
     }
 
     private fun cacheFile(place: Place, units: Units): File {
         return File(cacheDir, "${cacheKey(place)}_${units.name}.json")
+    }
+
+    private fun obsFile(place: Place): File = File(cacheDir, "obs_${cacheKey(place)}.json")
+
+    private fun stationFile(place: Place): File = File(cacheDir, "station_${cacheKey(place)}.json")
+
+    private fun readValidStationCache(place: Place): StationLookupCache? {
+        val file = stationFile(place)
+        if (!file.exists()) return null
+        val cached = runCatching { json.decodeFromString<StationLookupCache>(file.readText()) }.getOrNull() ?: return null
+        if (place.distanceKm(cached.placeLat, cached.placeLon) > Observations.STATION_MOVE_KM) return null
+        val maxAge = if (cached.station != null) STATION_FOUND_TTL_MS else STATION_MISSING_TTL_MS
+        if (System.currentTimeMillis() - cached.checkedAt > maxAge) return null
+        return cached
+    }
+
+    private fun discoverStation(place: Place): ObservationStation? {
+        val body = httpGet(
+            Observations.bboxUrl(place.latitude, place.longitude),
+            connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+            readTimeoutMs = OBS_READ_TIMEOUT_MS,
+        )
+        val station = Observations.nearestStation(place, Observations.parse(body, json))
+        val entry = StationLookupCache(
+            station = station,
+            placeLat = place.latitude,
+            placeLon = place.longitude,
+            checkedAt = System.currentTimeMillis(),
+        )
+        runCatching { stationFile(place).writeText(json.encodeToString(entry)) }
+        return station
+    }
+
+    private fun fetchObservations(place: Place): Pair<List<MetarDto>, String>? {
+        val cachedLookup = readValidStationCache(place)
+        var station = if (cachedLookup != null) cachedLookup.station else discoverStation(place)
+        if (station == null) return null
+
+        var body = httpGet(
+            Observations.stationUrl(station.icaoId),
+            connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+            readTimeoutMs = OBS_READ_TIMEOUT_MS,
+        )
+        var metars = Observations.parse(body, json)
+        // If a cached station stopped reporting, look for another nearby station once.
+        if (metars.isEmpty() && cachedLookup != null) {
+            val rediscovered = discoverStation(place) ?: return null
+            if (rediscovered.icaoId != station.icaoId) {
+                station = rediscovered
+                body = httpGet(
+                    Observations.stationUrl(station.icaoId),
+                    connectTimeoutMs = OBS_CONNECT_TIMEOUT_MS,
+                    readTimeoutMs = OBS_READ_TIMEOUT_MS,
+                )
+                metars = Observations.parse(body, json)
+            }
+        }
+        if (metars.isEmpty()) return null
+        runCatching { obsFile(place).writeText(body) }
+        return metars to station.label
+    }
+
+    private fun applyCachedObservations(place: Place, weather: Weather): Weather {
+        val lookup = readValidStationCache(place) ?: return weather
+        val station = lookup.station ?: return weather
+        val file = obsFile(place)
+        if (!file.exists()) return weather
+        val metars = runCatching { Observations.parse(file.readText(), json) }.getOrNull().orEmpty()
+        return Observations.merge(weather, metars, station.label)
+    }
+
+    private companion object {
+        const val OBS_CONNECT_TIMEOUT_MS = 3_500
+        const val OBS_READ_TIMEOUT_MS = 4_500
+        const val STATION_FOUND_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        const val STATION_MISSING_TTL_MS = 24L * 60 * 60 * 1000
     }
 
     private fun parseForecast(body: String, units: Units, fetchedAt: Long): Weather {
